@@ -1,8 +1,10 @@
 # SPEC.md - sdfshow (SRS)
 
 Software requirements and architecture for **sdfshow**: signed-distance-field shows
-authored as Markdown, compiled to a single GLSL raymarcher, and rendered frame-exact
-through VapourSynth. Version 0.1.0.
+authored as Markdown, compiled to a single GLSL shader, and rendered frame-exact
+through VapourSynth. Two renderers share the same Markdown and clock: a raymarcher
+(`mode: 3d`, the default) and a flat layer painter (`mode: 2d`, see section 10).
+Version 0.1.0.
 
 ---
 
@@ -19,11 +21,16 @@ In scope:
 - a small, validated parameter-expression language over animation tracks;
 - an order-dependent arrangement language for composing distance fields;
 - a raymarched renderer with normals, ambient occlusion, soft shadows and fog;
+- a flat 2D renderer that paints SDF layers back-to-front in screen space, with a
+  pixel-art quantise and per-layer outlines (`mode: 2d`);
+- speech bubbles drawn from a numpy SDF stroke font and composited as an overlay,
+  with synthesized dialogue audio (`## Dialogue`);
 - deterministic, seekable frames; versioned outputs; a build lock.
 
 Out of scope for 0.1.0:
 
-- audio generation or audio-reactive control (a later milestone; see `TODO.md`);
+- audio-reactive control and music generation (a later milestone; see `TODO.md`);
+  `## Dialogue` speech synthesis is in scope;
 - a GUI, a real-time preview, mesh export, or PBR/pathtracing;
 - arbitrary GLSL supplied by the user outside `fields/` (templates are function
   bodies, by design);
@@ -53,6 +60,12 @@ In scope for post-processing: a chain of generated pass shaders selected by a sh
   adds one more.
 - **Fold** - `fold_space(p)`, a whole-scene repetition applied before every field.
 - **Effect** - a generated post pass (`bloom`, `chroma`, `crt`, `glitch`).
+- **2D mode** - `mode: 2d`, a second renderer: every field is a flat shape evaluated
+  in screen space and the frame is painted back-to-front, like an SVG document.
+- **Layer** - one field drawn in 2D mode. A layer is a single flat fill, so a face or
+  a piece of furniture is several layers.
+- **Bubble** - one dialogue line's text and panel, rasterised by `textmask.py` into
+  two coverage masks and composited by VapourSynth after the SDF passes.
 
 ---
 
@@ -115,6 +128,11 @@ There is no hidden state between stages. `scene.glsl` is a complete, standalone
 artifact; you can read it, diff it, and reason about a shader compile error against
 it.
 
+With `## Dialogue`, two more stages sit between the shader chain and the encoder:
+`dialog.overlay_plan` rasterises each line with `textmask.py` into `gen/<s>/bubbles/`,
+and the generated script composites them with `std.MaskedMerge` (section 10.3). The
+SDF shader never sees the type.
+
 Module responsibilities:
 
 | module | responsibility |
@@ -125,8 +143,10 @@ Module responsibilities:
 | `show.py` | `show.md` parsing, cells, sections, materials, effects, folds, validation |
 | `tracks.py` | track parsing, parameter-expression validation, track GLSL |
 | `fields.py` | `fields.md` parsing, template preprocessing and substitution, field GLSL |
-| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, hook, effect passes |
-| `render.py` | compile, pass chain, VapourSynth script generation, vspipe/ffmpeg |
+| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, hook, effect passes; `assemble_2d` for `mode: 2d` |
+| `textmask.py` | numpy SDF stroke font, word wrap, fit-to-width, bubble panel + tail + ink masks |
+| `dialog.py` | `## Dialogue` parsing, per-speaker seating, bubble placement plan, flite TTS |
+| `render.py` | compile, pass chain, bubble compositing, VapourSynth script generation, vspipe/ffmpeg |
 | `proc.py` | exclusive build lock, quiet subprocess execution |
 | `cli.py` | argument parsing and command dispatch (`compile`, `frame`, `render`, `clips`) |
 
@@ -148,11 +168,11 @@ arithmetic over tracks and `t`.
 | `yaw` | orbit angle, radians | `0.6` |
 | `pitch` | elevation, radians | `-0.18` |
 | `fov` | focal length in the ray construction (larger = narrower) | `1.9` |
-| `target` | look-at point, `x|y|z` | `0|0|0` |
+| `target` | look-at point, `x\|y\|z` | `0\|0\|0` |
 | `fog` | exponential fog density | `0.03` |
 | `exposure` | pre-tonemap gain | `1.1` |
-| `background` | `r|g|b`, also the fog colour | `0.02|0.025|0.04` |
-| `light` | key light direction, `x|y|z` | `0.6|0.8|0.5` |
+| `background` | `r\|g\|b`, also the fog colour | `0.02\|0.025\|0.04` |
+| `light` | key light direction, `x\|y\|z` | `0.6\|0.8\|0.5` |
 | `scanlines` | screen pass: darken alternate pixel rows | `0` |
 | `plasma` | screen pass: slow colour wash | `0` |
 | `grain` | screen pass: per-pixel noise | `0.012` |
@@ -166,6 +186,26 @@ by the material pass. `mirror` takes `abs` on x and z; `kaleido` folds the XZ an
 into one sector of `TAU/fold_count` and reflects it. `fold_count` is a GLSL
 expression, so it may be a track (the ripple in `shows/reel`). An unknown mode fails
 at parse time.
+
+#### Stage keys for `mode: 2d`
+
+These are read only by the 2D renderer; the camera, `light`, `fog` and `fold` keys are
+ignored there because there is no march and no world space.
+
+| key | meaning | default |
+|-----|---------|---------|
+| `mode` | renderer: `3d` (raymarch) or `2d` (flat layers) | `3d` |
+| `pixel` | snap the sample to a grid of `pixel` device pixels; `1` disables it | `1` |
+| `outline` | rim width around every layer, screen units; `0` disables it | `0` |
+| `outline_color` | rim colour, `r\|g\|b` | `0.06\|0.05\|0.08` |
+| `font` | speech-bubble cap height as a fraction of frame height | `0.042` |
+| `panel` | bubble padding as a multiple of the type size | `1.0` |
+
+`pixel` and `outline` are ordinary stage values and may be tracks, so the pixel size
+or the rim can animate. `font` and `panel` are deliberately independent: shrinking the
+letters must not shrink the panel, or the bubble stops being readable. `background` is
+the 2D clear colour and `vignette`, `scanlines`, `plasma`, `grain` and `hue` still run
+in `post()`.
 
 Camera basis:
 
@@ -214,6 +254,11 @@ accepted as `x` for readability. The operand may be a number **or a track name**
 resolved through the same expression validator as field parameters, so a blend radius
 or a morph weight can be animated. Generated code: `smin(d, f, k)`,
 `smax(d, -f, k)`, `smax(d, f, k)`, `mix(d, f, clamp(w, 0.0, 1.0))`.
+
+In `mode: 2d` a cell is a **visibility gate**, not an operator: a layer either paints
+or it does not, because two flat fills cannot be min/maxed. `m<w>` degenerates to a
+visibility test at `w > 0.5`. This is what lets one show hold two settings: both
+furniture sets sit in the `Fields` table and only the active section's set is drawn.
 
 `m` is a cross-fade between two distances, and the average of two distances is not a
 distance, so it is only meaningful when both fields occupy the same space
@@ -269,9 +314,9 @@ or `h` is an error: those come from `show.md`.
 
 | kind | values | options |
 |------|--------|---------|
-| `steps` | `|`-separated numbers | `span=<bars>` (default 1), `ease=none|smooth` |
-| `bars` | `|`-separated numbers | `ease=none|smooth` |
-| `keys` | `bar:value|bar:value` | `ease=none|smooth` |
+| `steps` | `\|`-separated numbers | `span=<bars>` (default 1), `ease=none\|smooth` |
+| `bars` | `\|`-separated numbers | `ease=none\|smooth` |
+| `keys` | `bar:value\|bar:value` | `ease=none\|smooth` |
 | `expr` | one GLSL expression over `t` | none |
 
 Track names are unique and become `track_<name>`. `expr` is the escape hatch: its
@@ -399,9 +444,122 @@ solid would otherwise step backwards and produce an unexplained empty frame.
 Hard-coded effort constants live in `config.py`: `MARCH_STEPS=160`, `AO_STEPS=5`,
 `SHADOW_STEPS=24`, `SURFACE_EPS=0.0012`.
 
+With `mode: 2d`, items 4 and 6-7 of that list are replaced: there is no `map_scene`
+march, no camera, no normal and no shadow. The 2D scene is `render_2d(uv, t)`; see
+section 10.
+
 ---
 
-## 10. Renderer
+## 10. The 2D renderer (`mode: 2d`)
+
+### 10.1 Layer model
+
+`mode: 2d` is a second renderer behind the same Markdown. Every field is evaluated in
+**screen space**, not world space: `cx`/`cy` are frame offsets divided by frame
+height, so `y = 0` is the vertical centre, `y = -0.5` the bottom edge, `y = 0.5` the
+top, and `x` runs about `-0.89..0.89` at 16:9. A 2D template returns a signed
+distance in those units and nothing else - no solid, no material point.
+
+The frame is painted back-to-front with the painter's algorithm:
+
+```
+col = background
+for each layer, in Fields order:
+    if the current section draws it:
+        d = layer(p)
+        if d < -outline:  col = colour              # inside
+        elif d < 0:       col = mix(outline, colour) # rim, antialiased by smoothstep
+```
+
+So the `Fields` table reads top-to-bottom as a **z-stack**, exactly like the document
+order of an SVG. The first row is furthest back. `Sections` decides which rows are
+drawn; a cell of `x` means the layer is absent.
+
+A layer is one flat fill, which is the central constraint of this mode: a face cannot
+be drawn as one shape with painted features, because there is no shading and no
+texture. Faces are therefore **several layers** - head, hair, eyes, brows, mouth -
+each with its own colour and its own row in the table. The same applies to furniture
+(a window is a pane plus a frame). This is also how a pixel-art face is actually
+drawn, and it is why the result reads at a coarse grid.
+
+Because each layer is a single distance evaluation, the whole frame can be quantised
+to a pixel grid without the cost of a march. `pixel` snaps the sample coordinate to a
+device grid before any layer is evaluated; `outline` rims every layer; both are stage
+values and may be tracks.
+
+### 10.2 Generated 2D shader
+
+`glsl.assemble_2d` emits one `render_2d(vec2 uv, float t)`:
+
+- a `vec3 c[N]` array of resolved material colours, one per field, in `Fields` order;
+- one `if`/`else if` branch per section, keyed on `t < <hi * bar>`, so the section
+  chain is a compile-time ladder over bar ranges;
+- inside each branch, one guarded paint block per field, in order, using the same
+  `_cell_gate` visibility rule as the rest of the build.
+
+The section chain opens one branch per section and closes once at the end. Emitting
+the close per block leaves the last branch dangling and the shader does not compile;
+that is why the closing brace is written by the wrapper, not by the block loop.
+
+`post()` and `hook()` are shared with 3D mode: the pixel grid is applied to `uv`
+before `render_2d`, then vignette, scanlines, plasma and grain run as usual.
+
+### 10.3 Text, dialogue and audio
+
+Text is never part of the shader. `textmask.py` evaluates a stroke font as SDF capsule
+chains in numpy, producing two coverage masks per line: the **panel** (rounded
+rectangle plus a tail) and the **ink** (the letters, slightly proud of the panel so
+they can be composited separately).
+
+Sizing has two independent knobs, both stage keys:
+
+- `font` - cap height as a fraction of frame height. The line's pixel cap height is
+  `round(height * font)`, clamped to at least 8 px.
+- `panel` - padding as a multiple of the type size, passed to `bubble(panel_scale=...)`.
+
+`text_mask` sizes its canvas and places its first baseline from the same numbers
+(`baseline0 = cap * (1 + pad)`, canvas height `baseline0 + row*(lines-1) + cap*pad`),
+so the top row of the first line can never be clipped. A canvas sized from
+`row * lines + cap * 2 * pad` while placing the baseline at `(1 - pad) * cap` is the
+bug this replaced: it reserved the padding once at the bottom and then moved the text
+*up* into it.
+
+`## Dialogue` drives bubbles and speech from one table. Each line names a speaker,
+a bar range, the text and a flite voice. `dialog.py`:
+
+1. resolves the speaker's side from their field's `cx` in `fields.md` (`cx < 0` is
+   the left seat), so the tail points at the right person even with four speakers;
+2. seats the bubble above the head, at a fixed fraction of the frame, clamped inside
+   the frame width;
+3. synthesizes the line with ffmpeg's `flite` filter and mixes it at its bar.
+
+Lines longer than `MAX_CHARS` (48) fail at parse time, because a bubble that has to
+shrink below the font budget stops being readable.
+
+Compositing happens after the SDF passes and after the first `RGBS` conversion.
+`std.MaskedMerge` is the primitive in this build (there is no `std.Overlay`). For each
+line the script builds a constant RGB frame for the panel and ink, a `GRAYS` mask that
+equals the panel's coverage inside the line's frame window and zero outside, and merges
+it. Loop closures bind the mask through a factory (`make_alpha`), not by late binding,
+or every bubble would show the last line's mask.
+
+Font and bubble are orthogonal to the renderer: bubbles work the same way over a
+raymarched 3D show.
+
+### 10.4 What 2D mode does not do
+
+- No camera, normals, fog, shadows or `fold`; those keys are ignored.
+- No smooth union (`u<k>` behaves as `u`), subtraction or intersection: a layer is
+  either drawn or not.
+- No depth sorting within one section beyond table order; overlapping layers are
+  resolved only by the z-stack.
+- No tonemap and no gamma: material colours are the literal output colours, so a
+  palette can be specified exactly. `exposure` is therefore ignored in 2D.
+- No textures or sprites; every visual is an SDF shape.
+
+---
+
+## 11. Renderer
 
 `render.py` generates a VapourSynth script that chains every pass:
 
@@ -423,6 +581,10 @@ clip = core.resize.Bicubic(clip, format=vs.YUV420P8, matrix_in_s="470bg",
 
 Pass 0 is `scene.glsl`; each effect adds one call over the previous clip. Nothing is
 converted between passes: the chain stays `YUV444P16` until the final resize.
+
+If the show has `## Dialogue`, the chain then converts once to `RGBS` and composites
+one `std.MaskedMerge` per line (section 10.3), before the final `YUV420P8` resize. A
+3D show gets the same treatment, so text never enters the raymarch.
 
 `vs-placebo` requires `YUVxxxP16` input; the blank clip is only a frame carrier,
 because the scene shader ignores `HOOKED_tex` entirely (effect passes read it).
@@ -458,22 +620,25 @@ Ranges are half-open: `--from A --to B` encodes frames
 
 ---
 
-## 11. Outputs, versioning, locking
+## 12. Outputs, versioning, locking
 
 - `gen/<show>/scene.glsl` is generated; `fields/` is the source of truth.
 - `gen/<show>/fx_<n>_<name>.glsl` - one file per effect pass, in order.
 - `gen/<show>/score.json` records the resolved clock, effects, sections and cells for
   audits.
 - `gen/<show>/render.vpy` and `still.vpy` - the generated VapourSynth scripts.
+- `gen/<show>/bubbles/NN_panel.npy`, `NN_ink.npy` - one pair of coverage masks per
+  dialogue line.
 - `output/<show>/show.mp4`, `frame_NNNNN.png`, `clips/scene_NN_bars_A-B.mp4`; if a
   target exists, `_v2`, `_v3`, ...
-- `output/<show>/logs/{vspipe,ffmpeg}.log` capture stderr.
+- `output/<show>/logs/{vspipe,ffmpeg}.log` capture stderr; `logs/dialogue.wav` is the
+  synthesized speech track when `## Dialogue` is present.
 - `output/<show>/logs/.build.lock` (created with `O_EXCL`) prevents concurrent
   builds of the same show.
 
 ---
 
-## 12. Verification and acceptance
+## 13. Verification and acceptance
 
 Automated (`pytest`):
 
@@ -492,7 +657,12 @@ Automated (`pytest`):
 - effect parsing: first-appearance order, parameter merging, unknown effect failing;
 - fold parsing and generated `fold_space` for `mirror` and `kaleido`;
 - every effect pass being a valid `//!HOOK MAIN` shader with its knobs baked in;
-- the generated script chaining passes over `YUV444P16` with one `TIME0`.
+- the generated script chaining passes over `YUV444P16` with one `TIME0`;
+- 2D mode: `render_2d` is emitted instead of a march, layer order follows `Fields`,
+  and a section cell of `x` removes the layer's paint block;
+- bubble masks: `wrap`/`fit` never exceed the line budget, `text_mask` places its
+  first baseline inside the canvas (the clipping regression), and `panel` scales the
+  padding independently of `font`.
 
 Manual / GPU (`tests/gpu_parity.py`, run via `task parity`):
 
@@ -509,6 +679,11 @@ Manual / visual:
 - `shows/ops` shows `s` and `i` (bars 1-2 subtract, 2-4 intersect) and a `span=2`
   steps track;
 - `shows/post` shows all four effect passes at once;
+- `python -m sdfshow frame --show pixel --at 4` shows the diner with two people and
+  the cup clear of them; `--at 20` shows the living room with the sofa, lamp and four
+  characters, i.e. the same show in two settings;
+- the 50 s `shows/pixel` render has dialogue audio at every spoken bar range and no
+  bubble clipped at the top of its panel;
 - a still rendered via `--at` must equal the corresponding frame of the full video
   when both are decoded to the same colour space (verified at 44 dB PSNR after
   H.264, i.e. compression-only difference);
@@ -522,7 +697,7 @@ Manual / visual:
 
 ---
 
-## 13. Extension guide
+## 14. Extension guide
 
 ### Add a field template
 
@@ -530,6 +705,17 @@ Manual / visual:
 2. Add a `{{placeholder}}` for every knob.
 3. Add a row to a show's `## Fields` table with values for each placeholder.
 4. `compile`, then `frame` at a time where the field is active.
+
+### Add a 2D template
+
+1. Create `fields/<name>2d.glsl` returning a distance in **screen units** (frame
+   height = 1), with `{{cx}}`, `{{cy}}` and a `{{s}}` scale.
+2. Remember the layer is one flat fill: a shape that needs two colours is two
+   templates, or two rows in the same table.
+3. Keep the body free of `time`-named locals - a template local called `t` shadows the
+   shader's `t` and the shader will not compile.
+4. Add the row to a show's `## Fields` table, and a cell in every `Sections` row.
+5. `compile`, then `frame` at a bar where the row is active.
 
 ### Add a track kind
 
@@ -574,7 +760,7 @@ Manual / visual:
 
 ---
 
-## 14. Risks and limitations
+## 15. Risks and limitations
 
 - **No bit-exactness across GPUs.** GLSL transcendental functions differ by vendor.
   Within one driver a render is stable. Cross-machine comparisons need a tolerance.
@@ -598,9 +784,10 @@ Manual / visual:
   one.
 - **Mandelbulb is expensive.** Six iterations multiply the per-sample cost inside a
   160-step march.
-- **No audio yet.** `audio:` is parsed but not muxed. Audio-reactive control needs
-  a data channel into the shader (a sampled envelope array baked into the shader, or
-  the frame-strip idiom used by fftechno).
+- **`audio:` is parsed but not muxed.** Only `## Dialogue` produces a muxed track
+  (flite speech, placed by bar). Audio-reactive control still needs a data channel
+  into the shader (a sampled envelope baked into the shader, or the frame-strip idiom
+  used by fftechno).
 - **Shader compile errors are reported with prelude line numbers.** `scene.glsl` is
   prepended with ~80 lines by libplacebo; subtract them when reading an error.
 - **`#` comments.** A template cannot start a line with a GLSL preprocessor
@@ -611,16 +798,28 @@ Manual / visual:
 - **Pattern aliasing.** `checker` and `grid` have hard edges and alias in the
   distance; the scanline pass hides some of it, but there is no derivative-based
   anti-aliasing yet.
+- **2D mode has no depth.** Layer order is table order, so two shapes in the same
+  section cannot interleave; a character behind a table must be listed behind it.
+- **2D mode has no operators.** `u<k>`, `s<k>` and `i<k>` lose their meaning: a layer
+  paints or it does not. Cross-fades (`m`) degrade to a visibility test at `w > 0.5`.
+- **A 2D face is many layers.** Head, hair, eyes, brows and mouth are five rows per
+  character, and each row needs a colour and a cell in every section. That is the cost
+  of one fill per layer.
+- **Bubble text is capped at 48 characters.** Longer lines fail at parse time; there
+  is no automatic reflow across two bubbles.
+- **flite voices are robotic.** They are legible and deterministic, which is enough
+  for timing, but they are not voice acting.
 
 ---
 
-## 15. File inventory
+## 16. File inventory
 
 | path | tracked | purpose |
 |------|---------|---------|
 | `sdfshow/*.py` | yes | the package |
-| `fields/*.glsl` | yes | template library |
+| `fields/*.glsl` | yes | template library (3D bodies and `*2d.glsl` flat layers) |
 | `fields/README.md` | yes | template-language guide |
+| `shows/pixel/{show,fields}.md` | yes | 2D pixel-art show: diner then living room, four characters, dialogue |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |
 | `shows/demo/{show,fields}.md` | yes | demoscene set (tunnel, Menger, gyroid, sun, columns) |
@@ -636,7 +835,7 @@ Manual / visual:
 
 ---
 
-## 16. Design decisions and rejected alternatives
+## 17. Design decisions and rejected alternatives
 
 **Port of the fftechno notion, not its code.** Stories are folders of Markdown,
 templates carry mandatory placeholders, the build fails loudly, renders are
@@ -712,6 +911,48 @@ point is folded into an angular sector *before* the sphere is evaluated, and the
 is applied to the resulting point. Rotating first and folding second makes the sphere
 drift out of the sector as time advances, so the object silently leaves the view. That
 ordering bug cost several iterations to find; the template now documents it.
+
+**2D mode is a second renderer, not a flag on the first.** A flat show has no camera,
+no normals and no march, so pretending it shares the 3D scene would mean a shader full
+of dead branches per pixel. Instead `glsl.assemble_2d` emits a different entry point
+(`render_2d`) while everything above it - the clock, the Markdown reader, the template
+preprocessor, the track compiler, the effects chain and the renderer - stays shared.
+The mode is a Stage key so a show states which renderer it wants in one line.
+
+**Painter's algorithm over distance fields.** Given that a 2D layer is a flat fill,
+the cheapest correct compositor is "draw back to front, overwrite". That makes the
+`Fields` table a z-stack, reuses the existing arrangement table as a visibility table,
+and costs one distance evaluation per layer per pixel. The alternative - depth tests
+between layers - would need a depth per layer, a second value out of every template,
+and a sort; it buys nothing a table order cannot express.
+
+**One fill per layer, therefore many layers per face.** A pixel-art face is
+`head + hair + eyes + brows + mouth`, five rows, five colours. That looks verbose
+next to a 3D face, which is one field with shading, but it is the same trade the
+format makes everywhere: the picture is a table, and every entry is inspectable. The
+alternative - a template that returns a colour per pixel - would turn templates into
+mini-shaders and lose the single-return contract that makes them cheap to write and to
+test.
+
+**Text is a numpy mask, not shader work.** Evaluating a stroke font per pixel inside
+the shader is possible (an early version did it) and it forces the marcher to know
+about glyphs, inflates compile time and makes text a per-frame cost. Rasterising each
+line once with SDFs in numpy, then compositing with `std.MaskedMerge`, keeps text out
+of the shader entirely, makes the masks inspectable as `.npy`, and works identically
+over 2D and 3D shows. The cost is that the masks are built at compile time, so a
+bubble cannot be animated per frame; nothing needed that yet.
+
+**Font size and panel size are separate keys.** The first version derived the bubble
+from the type, so asking for smaller letters also shrank the panel until the text
+touched its edge. `font` (cap height) and `panel` (padding multiplier) are now
+independent, which is the only way both "small type" and "comfortable bubble" can be
+true at once.
+
+**Settings are switched by `Sections`, not by separate shows.** A show that changes
+room is one `Fields` table with both rooms and a cell per field per section; `x` means
+absent. This keeps one clock, one dialogue table and one render for the whole episode,
+and it is the same mechanism that brings characters on and off. Duplicating the show
+per room would drift the two copies apart and double the render.
 
 **Prior art.** Shader Park (JS DSL -> GLSL SDF, headless converters), ISF (a JSON
 header declaring `audio`/`audioFFT` inputs, i.e. the shader/host contract),

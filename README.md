@@ -3,9 +3,14 @@
 **Signed-distance-field shows rendered from Markdown.**
 
 A show is a folder of two Markdown files. One carries the clock (`bpm`, `bars`,
-`fps`), the camera and the arrangement; the other instantiates SDF templates and
-animation tracks. `compile` turns them into a single GLSL raymarcher. VapourSynth
-shades every frame with it; ffmpeg only encodes the frames.
+`fps`), the stage and the arrangement; the other instantiates SDF templates and
+animation tracks. `compile` turns them into a single GLSL shader. VapourSynth shades
+every frame with it; ffmpeg only encodes the frames.
+
+There are two renderers behind the same Markdown: a raymarched 3D scene, and a flat
+2D pixel-art scene where the `Fields` table is a z-stack of shapes (`mode: 2d`).
+Speech bubbles are drawn from an SDF stroke font and composited by VapourSynth, with
+optional synthesized dialogue.
 
 There is no scene graph editor and no keyframe timeline. There is a clock, a text
 file, and a shader you can read.
@@ -45,12 +50,15 @@ fails without it. Development extras (pytest, ruff, black):
 
 `shows/demo` is the demoscene set (ring tunnel, Menger sponge, gyroid, striped sun
 and a column hall). `shows/reel` is the long one: 30 seconds, five scenes, morphs,
-an animated kaleido fold and a shifting effect chain.
+an animated kaleido fold and a shifting effect chain. `shows/pixel` is the flat 2D
+one: a diner that cuts to a living room, four characters and spoken dialogue.
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
 .venv\Scripts\python -m sdfshow render --show demo
 .venv\Scripts\python -m sdfshow render --show reel
+.venv\Scripts\python -m sdfshow frame  --show pixel --at 4
+.venv\Scripts\python -m sdfshow render --show pixel
 ```
 
 - `compile` writes `gen/first/scene.glsl` and `gen/first/score.json`.
@@ -67,7 +75,7 @@ an animated kaleido fold and a shifting effect chain.
 
 ```
 shows/<name>/
-  show.md        clock, stage, field order, arrangement, materials
+  show.md        clock, stage, field order, arrangement, materials, dialogue
   fields.md      globals, field instances (template + parameters), tracks
 fields/          the SDF template library (GLSL function bodies)
 gen/<name>/      generated scene.glsl + score.json (gitignored)
@@ -165,6 +173,20 @@ The Stage table also carries the screen-space pass and the space fold:
 | `hue` | rotate every material colour around grey (colour cycling) | `0` |
 | `fold` | repeat space before every field: `none`, `mirror`, `kaleido` | `none` |
 | `fold_count` | sectors for `fold: kaleido` | `6` |
+
+In `mode: 2d` the camera keys are ignored and these apply instead:
+
+| key | meaning | default |
+|-----|---------|---------|
+| `mode` | `3d` (raymarch) or `2d` (flat layers) | `3d` |
+| `pixel` | snap the picture to a grid of `pixel` device pixels | `1` |
+| `outline` | dark rim around every layer; `0` turns it off | `0` |
+| `outline_color` | rim colour | `0.06\|0.05\|0.08` |
+| `font` | bubble cap height as a fraction of frame height | `0.042` |
+| `panel` | bubble padding as a multiple of the type size | `1.0` |
+
+`font` and `panel` are independent: small letters, comfortable panel. Both work in
+3D shows too, since bubbles are an overlay.
 
 ### Effect passes
 
@@ -268,6 +290,9 @@ It must return a distance. Available helpers: `rotX`, `rotY`, `rotZ`, `rot2`,
 `smin`, `smax`, `hash11`, `hash21`, and the clock defines. See
 `fields/README.md`.
 
+In `mode: 2d` the same template contract applies, but `p` is screen space and only
+`p.xy` is meaningful; the `*2d.glsl` templates are written for that.
+
 Templates may span several indented lines. Blank lines, lines starting with `#`,
 and `//` comments are removed before the lines are joined.
 
@@ -300,6 +325,107 @@ lines long.
 `shows/demo` uses all of them across four bar-clocked scenes. The screen pass adds
 scanlines, plasma, hue cycling and grain, so the CRT feel comes from the Stage
 table, not from ffmpeg.
+
+## 2D mode
+
+`mode: 2d` swaps the renderer for the same Markdown. There is no camera, no march and
+no shading: every field is a flat shape evaluated in **screen space**, and the frame
+is painted back-to-front. The `Fields` table becomes a z-stack, exactly like the
+document order of an SVG:
+
+```
+col = background
+for each layer, in Fields order:
+    if the current section draws it:
+        d = layer(p)
+        if d < -outline:  col = colour        # inside
+        elif d < 0:       col = mix(outline, colour)
+```
+
+Screen space is the frame offset divided by frame height: `y = 0` is the centre,
+`-0.5` the bottom and `0.5` the top; `x` runs about `-0.89..0.89` at 16:9. A 2D
+template returns a distance in those units, so `ellipse2d` with `ry=0.1` is a shape a
+fifth of the frame tall.
+
+The shipped 2D templates:
+
+| template | what it makes |
+|----------|---------------|
+| `ellipse2d.glsl` | ellipse (`rx`, `ry`) |
+| `box2d.glsl` | rounded box (`hx`, `hy`, `round`) |
+| `capsule2d.glsl` | capsule |
+| `head2d.glsl` | a head with shoulders (`wide`, `shoulders`) |
+| `hair2d.glsl` | one of four hair silhouettes (`style`, `fringe`) |
+| `face2d.glsl` | eyes, brows or mouth as separate layers (`kind`) |
+| `seat2d.glsl` | a booth bench (`hw`, `hh`) |
+| `table2d.glsl` | a table top (`hw`) |
+| `sofa2d.glsl` | sofa: seat, short back, arms (`hw`, `back`) |
+| `lamp2d.glsl` | floor lamp with a glow (`glow`) |
+| `window2d.glsl` | pane plus frame |
+
+```markdown
+## Stage
+| key     | value            |
+|---------|------------------|
+| mode    | 2d               |
+| pixel   | 9                |
+| outline | 0.007            |
+| font    | 0.020            |
+| panel   | 2.60             |
+```
+
+Three consequences worth knowing before writing a 2D show:
+
+- **A layer is one flat fill.** A face cannot be one shape with painted features, so
+  it is several rows - head, hair, eyes, brows, mouth - each with its own colour.
+  Furniture splits the same way (a window is a pane plus a frame).
+- **Cells are visibility, not operators.** `x` means the layer is absent; `u` and `u<k>`
+  both mean "draw it"; `m<w>` is a fade gate at `w > 0.5`. min/max of two flat fills
+  has no meaning.
+- **Table order is depth.** There is no per-pixel depth test, so a character behind a
+  table must be listed before it.
+
+`Sections` is how a 2D show changes **setting**, not just cast: both sets of furniture
+live in the `Fields` table and only the active section draws its set. `shows/pixel`
+does this with a diner (bars 0-8) and a living room (8-20):
+
+```markdown
+| bars  | sky | floor_diner | booth | table | cup | wall_house | sofa | ... |
+|-------|-----|-------------|-------|-------|-----|------------|------|-----|
+| 0-4   | u   | u           | u     | u     | u   | x          | x    | ... |
+| 4-8   | u   | u           | u     | u     | u   | x          | x    | ... |
+| 8-14  | x   | x           | x     | x     | x   | u          | u    | ... |
+| 14-20 | x   | x           | x     | x     | x   | u          | u    | ... |
+```
+
+`pixel` quantises the whole frame to a device grid before any layer is evaluated, so
+the look costs nothing extra; `outline` rims every layer and is antialiased with a
+`smoothstep`. Both may be tracks.
+
+## Dialogue
+
+An optional `## Dialogue` table drives the bubbles and the audio from one source:
+
+```markdown
+## Dialogue
+| speaker | bars | text                          | voice |
+|---------|------|-------------------------------|-------|
+| AINA    | 1-2  | So we are just going to sit here? | slt |
+| BORIS   | 2-3  | That was the plan.            | rms   |
+```
+
+- `speaker` names a field in `fields.md`; the bubble is seated above that field's `cx`,
+  and its tail points at them.
+- `text` becomes a rounded panel plus a tail, rasterised as SDF coverage masks by
+  `sdfshow/textmask.py` at compile time.
+- `voice` is an ffmpeg `flite` voice; each line is synthesized at its bar and mixed
+  into the show's audio track.
+
+The masks are composited by VapourSynth after the SDF passes (`std.MaskedMerge`, one
+per line, over the line's frame window), so text is never part of the shader. Type
+size and panel size are separate stage keys: `font` is the cap height as a fraction of
+frame height, `panel` pads the bubble relative to the type. Lines longer than 48
+characters fail the build rather than shrink below legibility.
 
 ## Commands
 
@@ -337,7 +463,7 @@ table, not from ffmpeg.
 ## Checks
 
 ```powershell
-.venv\Scripts\python -m pytest -q        # 48 unit tests, no GPU needed
+.venv\Scripts\python -m pytest -q        # 53 unit tests, no GPU needed
 .venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
 ```
 
@@ -362,6 +488,13 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | an effect pass has no visible change | check the `## Effects` table: rows merge per effect, and order is first appearance |
 | the whole frame is black with `crt` | `curvature` is pushing the corners off-screen; lower it |
 | a kaleido fold hides the scene | the fold repeats the field, so raise `distance` or move `target` |
+| a 2D layer is missing | its `Sections` cell is `x`; a 2D layer is drawn only when its row is active |
+| a 2D character's face floats | head, hair, eyes, brows and mouth are separate rows; check their `cx`/`cy` agree |
+| the 2D picture has no shading | by design: a layer is one flat fill, and `outline` draws the rim |
+| text is clipped at the top of the bubble | the mask's baseline and canvas must derive from the same numbers; see `SPEC.md` §10.3 |
+| letters are too big but the bubble is right | lower `font` only; `panel` is the padding, independent of type size |
+| every bubble shows the same line | a `ModifyFrame` closure captured the loop variable; bind the mask through a factory |
+| a bubble does not appear at the bar it should | `overlay_plan` windows are half-open in frames; sample inside `bars * bar` |
 
 ## Project layout
 
@@ -373,6 +506,7 @@ shows/reel/     the 30-second reel: tunnel, Menger, gyroid, orbs, sun (morphs, f
 shows/demo/     the demoscene set (tunnel, Menger, gyroid, sun and columns)
 shows/ops/      subtract and intersect operators, plus a span=2 steps track
 shows/post/     a one-bar probe of the effect chain
+shows/pixel/    flat 2D pixel art: diner, then living room, four characters, dialogue
 shows/ring/     a one-field probe
 tests/          pytest suite + tests/gpu_parity.py (manual GPU check)
 gen/            generated shaders and scores (gitignored)
@@ -381,6 +515,11 @@ SPEC.md         the SRS: architecture, control surfaces, acceptance checks
 TUTORIAL.md     the long-form guide: SDF, VapourSynth, Markdown, walkthroughs
 TODO.md         open work
 ```
+
+## Licence
+
+PolyForm Noncommercial 1.0.0 - see [LICENSE.md](LICENSE.md). Required notice:
+Copyright Xyzzy Apps (xyzzyapps@gmail.com).
 
 ## Lineage
 

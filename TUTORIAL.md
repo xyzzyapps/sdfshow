@@ -1072,6 +1072,92 @@ Two lessons are baked into that table:
 - `fold_count` is a track, so the kaleido ripple is a value in the Stage table, not a
   new template.
 
+## 14. Walkthrough: `shows/pixel`
+
+`shows/pixel` is the flat 2D show. It is the same Markdown format as everything else;
+only the Stage says so:
+
+```markdown
+| key           | value            |
+|---------------|------------------|
+| mode          | 2d               |
+| pixel         | 9                |
+| outline       | 0.007            |
+| outline_color | 0.08\|0.05\|0.09 |
+| font          | 0.020            |
+| panel         | 2.60             |
+```
+
+There is no camera in this show, because there is no march. `compile` emits a
+`render_2d(uv, t)` instead of a raymarcher, and the frame is painted back-to-front:
+
+```
+col = background
+for each layer, in Fields order:
+    if the current section draws it:
+        d = layer(p)
+        if d < -outline:  col = colour
+        elif d < 0:       col = mix(outline, colour)
+```
+
+Three things follow from that loop, and they are the whole of 2D authoring:
+
+1. **Table order is depth.** The first row in `Fields` is furthest back. A character
+   behind a table is listed before the table; there is no per-pixel depth test.
+2. **A layer is one flat fill.** A face is five rows - head, hair, eyes, brows, mouth -
+   because a single row cannot carry shading or a second colour. A window is a pane
+   plus a frame for the same reason.
+3. **A cell is visibility, not an operator.** `x` means the layer is absent; `u` and
+   `u<k>` both mean "draw it". Two flat fills cannot be min/maxed, so `s` and `i` are
+   meaningless here and `m<w>` becomes a fade gate at `w > 0.5`.
+
+The show has two **settings**, switched by `Sections`. Both rooms' furniture sits in
+one `Fields` table; only the active section's rows are drawn:
+
+| bars  | setting | who |
+|-------|---------|-----|
+| 0-8   | the diner: blue wall, booth, table, cup | Aina and Boris in the booth; Dora standing |
+| 8-20  | the house: grey wall, sofa, rug, lamp, chair | Aina and Boris on the sofa; Dora and Ellis standing |
+
+That is the point of the show: a scene change is a section change, not a second
+show. The clock, the dialogue table and the render are shared.
+
+The four characters are distinguished by **silhouette**, which is what survives at a
+9-pixel grid: Aina narrow, Boris broad-shouldered, Dora long-haired, Ellis round and
+balding. Colour is a second cue, not the first.
+
+Dialogue comes from one table:
+
+```markdown
+| speaker | bars | text                              | voice |
+|---------|------|-----------------------------------|-------|
+| AINA    | 1-2  | So we are just going to sit here? | slt   |
+```
+
+`dialog.py` reads the speaker's `cx` from `fields.md` to decide left or right, so the
+bubble tail points at the right person even with four speakers. The text is
+rasterised by `textmask.py` into a panel mask and an ink mask, and
+`render.py` composites them with `std.MaskedMerge` over the line's frame window. The
+shader never sees a glyph.
+
+`font` and `panel` are separate on purpose. `font` is the cap height as a fraction of
+frame height; `panel` is the padding as a multiple of the type size. An early version
+derived both from one number, so asking for smaller letters made the bubble tight
+enough to clip the first line. `text_mask` now derives its canvas height and its first
+baseline from the same numbers, and a test holds that.
+
+Render it:
+
+```powershell
+.venv\Scripts\python -m sdfshow frame  --show pixel --at 4
+.venv\Scripts\python -m sdfshow frame  --show pixel --at 20
+.venv\Scripts\python -m sdfshow render --show pixel
+```
+
+The first still is the diner with two people; the second is the living room with the
+sofa and four. The render is 50 seconds, 1500 frames at 30 fps, with a synthesized
+voice line at each spoken bar range.
+
 ## 15. Recipes
 
 ### 12.1 Checkerboard floor
@@ -1301,7 +1387,7 @@ libplacebo hook.
 The reason is that the alternative is a second effects language, with a second set of
 colour-space rules and a picture that is half shader and half filter graph. Keeping
 one language means one artifact to read (`gen/`), one place a bug lives, and `TIME0`
-injected consistently into every pass. The trade is recorded in `SPEC.md` §16.
+injected consistently into every pass. The trade is recorded in `SPEC.md` §17.
 
 ### 17.4 Why the clock is a frame index
 
@@ -1322,7 +1408,7 @@ Claiming "a render is a pure function of the Markdown" required:
   (~40 dB PSNR), which H.264 then propagated through the whole file.
 
 The second was invisible from MP4 hashes alone; it was found by comparing Y4M
-streams. See §16.9 for the diagnostic recipe.
+streams. See `SPEC.md` §11 for why `-r 1` is required and what it costs.
 
 ### 17.6 Package layout
 
@@ -1333,8 +1419,10 @@ streams. See §16.9 for the diagnostic recipe.
 | `show.py` | `show.md`: stage, fields order, materials, effects, folds, cells |
 | `fields.py` | `fields.md`: globals, parameters, template substitution |
 | `tracks.py` | track parsing, parameter-expression validation, track GLSL |
-| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, effects |
-| `render.py` | compile, pass chain, VapourSynth script, vspipe/ffmpeg |
+| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, effects; `assemble_2d` for `mode: 2d` |
+| `textmask.py` | numpy SDF stroke font, wrap, fit, bubble panel and ink masks |
+| `dialog.py` | `## Dialogue`, seating, bubble plan, flite speech |
+| `render.py` | compile, pass chain, bubble compositing, VapourSynth script, vspipe/ffmpeg |
 | `proc.py` | build lock, quiet subprocess execution |
 | `config.py` | paths, stage defaults, effort and encode constants |
 | `cli.py` | `compile`, `frame`, `render`, `clips`, `shows` |
