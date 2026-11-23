@@ -682,6 +682,8 @@ Manual / visual:
 - `python -m sdfshow frame --show pixel --at 4` shows the diner with two people and
   the cup clear of them; `--at 20` shows the living room with the sofa, lamp and four
   characters, i.e. the same show in two settings;
+- `python -m sdfshow frame --show diner --at 3` shows the raymarched booth, and a
+  frame after a `cuts` key shows the camera has moved to another shot;
 - the 50 s `shows/pixel` render has dialogue audio at every spoken bar range and no
   bubble clipped at the top of its panel;
 - a still rendered via `--at` must equal the corresponding frame of the full video
@@ -820,6 +822,7 @@ Manual / visual:
 | `fields/*.glsl` | yes | template library (3D bodies and `*2d.glsl` flat layers) |
 | `fields/README.md` | yes | template-language guide |
 | `shows/pixel/{show,fields}.md` | yes | 2D pixel-art show: diner then living room, four characters, dialogue |
+| `shows/diner/{show,fields}.md` | yes | 3D animation: booth, two people, cut-track camera, dialogue |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |
 | `shows/demo/{show,fields}.md` | yes | demoscene set (tunnel, Menger, gyroid, sun, columns) |

@@ -50,13 +50,17 @@ fails without it. Development extras (pytest, ruff, black):
 
 `shows/demo` is the demoscene set (ring tunnel, Menger sponge, gyroid, striped sun
 and a column hall). `shows/reel` is the long one: 30 seconds, five scenes, morphs,
-an animated kaleido fold and a shifting effect chain. `shows/pixel` is the flat 2D
-one: a diner that cuts to a living room, four characters and spoken dialogue.
+an animated kaleido fold and a shifting effect chain.
+
+The two animations are `shows/diner` (3D, the first one: two people in a booth and a
+cut-track camera) and `shows/pixel` (flat 2D: a diner that cuts to a living room,
+four characters and spoken dialogue).
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
 .venv\Scripts\python -m sdfshow render --show demo
 .venv\Scripts\python -m sdfshow render --show reel
+.venv\Scripts\python -m sdfshow render --show diner
 .venv\Scripts\python -m sdfshow frame  --show pixel --at 4
 .venv\Scripts\python -m sdfshow render --show pixel
 ```
@@ -402,6 +406,9 @@ does this with a diner (bars 0-8) and a living room (8-20):
 the look costs nothing extra; `outline` rims every layer and is antialiased with a
 `smoothstep`. Both may be tracks.
 
+The 3D sibling is `shows/diner`: the same `## Dialogue` format and the same booth, but
+raymarched, with a `cuts` track driving the camera.
+
 ## Dialogue
 
 An optional `## Dialogue` table drives the bubbles and the audio from one source:
@@ -507,6 +514,7 @@ shows/demo/     the demoscene set (tunnel, Menger, gyroid, sun and columns)
 shows/ops/      subtract and intersect operators, plus a span=2 steps track
 shows/post/     a one-bar probe of the effect chain
 shows/pixel/    flat 2D pixel art: diner, then living room, four characters, dialogue
+shows/diner/    the 3D animation: two people in a booth, cut-track camera, dialogue
 shows/ring/     a one-field probe
 tests/          pytest suite + tests/gpu_parity.py (manual GPU check)
 gen/            generated shaders and scores (gitignored)

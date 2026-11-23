@@ -19,7 +19,7 @@ without reading the source first.
 - [11. Walkthrough: `shows/first`](#11-walkthrough-showsfirst)
 - [12. Walkthrough: `shows/demo`](#12-walkthrough-showsdemo)
 - [13. Walkthrough: `shows/ops`](#13-walkthrough-showsops)
-- [14. Walkthrough: `shows/reel`](#14-walkthrough-showsreel)
+- [14. Walkthrough: `shows/pixel`](#14-walkthrough-showspixel)
 - [15. Recipes](#15-recipes)
 - [16. Debugging](#16-debugging)
 - [17. How the pieces fit together](#17-how-the-pieces-fit-together)

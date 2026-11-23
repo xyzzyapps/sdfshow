@@ -2,12 +2,6 @@
 
 Open work only. Design reasoning lives in `SPEC.md`.
 
-## Blocked on approval
-
-- [ ] delete `shows/diner` and `shows/bar`: both are superseded by `shows/pixel`
-      (the 2D rework folded their two-figure dialogue into one show with two settings).
-      They still compile, so deleting them is a judgement call, not a fix.
-
 ## Open
 
 - [ ] `polygon2d`: a flat polygon needs a vertex-list macro the template language
@@ -62,8 +56,11 @@ Open work only. Design reasoning lives in `SPEC.md`.
 
 - [x] `shows/first`, `shows/ring`, `shows/ops`, `shows/post`, `shows/demo`
 - [x] `shows/reel`: 30 s, five scenes, morphs, kaleido ripple, effect chain
+- [x] `shows/diner`: the 3D animation (booth, two people, cut-track camera, dialogue)
 - [x] `shows/pixel`: two settings switched by `Sections`, four characters,
       12 dialogue lines, 50 s render with audio
+- [x] deleted `shows/bar`: the abandoned first dialogue scene, superseded by
+      `shows/diner`; `tools/bubble_probe.py` now reads `shows/diner`
 
 ### Pipeline
 

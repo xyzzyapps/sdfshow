@@ -24,7 +24,7 @@ from sdfshow.show import parse  # noqa: E402
 
 def main() -> int:
     """Render the first AINA line as solid ink over a big grid of cells."""
-    show = parse("bar", C.SHOWS / "bar" / "show.md")
+    show = parse("diner", C.SHOWS / "diner" / "show.md")
     load(
         show.fields_md,
         show.clock,
