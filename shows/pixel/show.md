@@ -144,20 +144,21 @@ changes with it.
 
 ## Dialogue
 
-Bar is 2.5 s at 96 BPM.
+Bar is 2.5 s at 96 BPM. `slt` is the only female voice in a stock flite build, so
+Dora is `slt*0.92`: the same speaker, pitched down with rubberband, and not Aina.
 
 | speaker | bars | text | voice |
 |---------|------|------|-------|
 | AINA | 1-2 | We have been sitting here for an hour. | slt |
 | BORIS | 2-3 | The sign says wait to be seated. | rms |
-| DORA | 5-6 | I have been standing since Tuesday. | awb |
+| DORA | 5-6 | I have been standing since Tuesday. | slt*0.92 |
 | BORIS | 6-7 | It is Thursday. | rms |
 | AINA | 9-10 | This is not the same room. | slt |
 | BORIS | 10-11 | The furniture moved with us. | rms |
 | AINA | 11-13 | That is not how furniture works. | slt |
-| DORA | 13-14 | It is how this furniture works. | awb |
+| DORA | 13-14 | It is how this furniture works. | slt*0.92 |
 | ELLIS | 15-16 | I am here about the lamp. | kal |
-| DORA | 16-17 | Nobody is here about the lamp. | awb |
+| DORA | 16-17 | Nobody is here about the lamp. | slt*0.92 |
 | ELLIS | 17-18 | I am. | kal |
 | BORIS | 18-20 | Then we are all accounted for. | rms |
 

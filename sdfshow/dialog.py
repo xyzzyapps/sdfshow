@@ -90,33 +90,63 @@ def character(lines: list[Line], name: str) -> list[Line]:
     return [line for line in lines if line.speaker == name]
 
 
+def _voice_spec(cell: str) -> tuple[str, float]:
+    """Split a Dialogue ``voice`` cell into a flite voice and a pitch factor.
+
+    ``slt`` is the only female voice in a stock flite build, so two women in one show
+    would otherwise share a voice exactly. The cell accepts ``<voice>*<pitch>``, e.g.
+    ``slt*0.92``, and the pitch is applied with rubberband, which shifts pitch without
+    changing the length of the line.
+    """
+    name, _, factor = cell.partition("*")
+    name = name.strip()
+    factor = factor.strip()
+    if not name:
+        raise SystemExit("show.md: a Dialogue voice is empty; use e.g. 'slt'")
+    if not factor:
+        return name, 1.0
+    try:
+        pitch = float(factor)
+    except ValueError:
+        raise SystemExit(
+            f"show.md: dialogue voice '{cell}' has a pitch that is not a number"
+        ) from None
+    if not 0.5 <= pitch <= 2.0:
+        raise SystemExit(
+            f"show.md: dialogue voice '{cell}' pitch must be between 0.5 and 2.0"
+        )
+    return name, pitch
+
+
 def _say(text: str, voice: str, out: Path) -> float:
     """Synthesize *text* with ffmpeg's flite filter. Returns the duration."""
     import subprocess
 
+    name, pitch = _voice_spec(voice)
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-y",
-            "-v",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            f"flite=text='{text}':voice={voice}",
-            "-ar",
-            str(C.MASTER_SR),
-            "-ac",
-            "1",
-            "-c:a",
-            "pcm_s16le",
-            str(out),
-        ],
-        check=True,
-        capture_output=True,
-    )
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-y",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        f"flite=text='{text}':voice={name}",
+    ]
+    if pitch != 1.0:
+        command += ["-af", f"rubberband=pitch={pitch:.4f}"]
+    command += [
+        "-ar",
+        str(C.MASTER_SR),
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        str(out),
+    ]
+    subprocess.run(command, check=True, capture_output=True)
     with wave.open(str(out), "rb") as wf:
         return wf.getnframes() / wf.getframerate()
 

@@ -446,7 +446,9 @@ An optional `## Dialogue` table drives the bubbles and the audio from one source
 - `text` becomes a rounded panel plus a tail, rasterised as SDF coverage masks by
   `sdfshow/textmask.py` at compile time.
 - `voice` is an ffmpeg `flite` voice; each line is synthesized at its bar and mixed
-  into the show's audio track.
+  into the show's audio track. A stock flite build has one female voice (`slt`),
+  so `voice` also accepts a pitch factor: `slt*0.92` is the same speaker, pitched
+  down with rubberband so two women in one show do not sound identical.
 
 The masks are composited by VapourSynth after the SDF passes (`std.MaskedMerge`, one
 per line, over the line's frame window), so text is never part of the shader. Type

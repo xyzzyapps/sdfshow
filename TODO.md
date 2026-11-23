@@ -67,6 +67,8 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] bubbles: panel centred on the speaker's screen position (camera-aware), wide
       tail whose tip lands on their head
 - [x] dialogue rewritten: dry, distinct voices, a running gag and a button
+- [x] female voice for Dora: `slt*0.92` (pitch-shifted with rubberband) instead of
+      the male `awb`; the voice cell accepts `<voice>*<pitch>` and is tested
 - [x] mouth tracks corrected to each speaker's own bar windows (they were one line out)
 - [x] `tests/test_textmask.py`: no clipping, wrap/fit budget, panel padding vs type,
       tail side

@@ -554,7 +554,10 @@ a bar range, the text and a flite voice. `dialog.py`:
 3. points the tail at that screen x by passing it as a fraction of the panel width,
    clamped away from the corners; the tail is a wide, short triangle, not a spike;
 4. seats the panel high in the frame, inside the frame width;
-5. synthesizes the line with ffmpeg's `flite` filter and mixes it at its bar.
+5. synthesizes the line with ffmpeg's `flite` filter and mixes it at its bar. The
+   voice cell may carry a pitch factor (`slt*0.92`), applied with rubberband, so
+   two characters can share the single female voice a stock flite build ships
+   without sounding identical.
 
 Lines longer than `MAX_CHARS` (48) fail at parse time, because a bubble that has to
 shrink below the font budget stops being readable.
