@@ -105,10 +105,13 @@ def text_mask(
     cols = max((len(line) for line in lines), default=1)
     width = round(advance * cols) + 1
     row = cap * (1.0 + LINE_GAP)
-    height = round(row * len(lines) + cap * 2.0 * pad) + 1
+    # Glyphs are drawn from a baseline upwards, so the first baseline must sit one full
+    # cap height below the top edge plus the padding. Getting this wrong clips the tops of
+    # the first line's letters - the canvas is sized from the same numbers, so the two
+    # must agree.
+    baseline0 = cap * (1.0 + pad)
+    height = round(baseline0 + row * (len(lines) - 1) + cap * pad) + 1
     usable = np.full((height, width), 1e9, np.float32)
-
-    baseline0 = (1.0 - pad) * cap
     for row_index, text in enumerate(lines):
         baseline = baseline0 + row_index * row
         for index, char in enumerate(text):
@@ -157,16 +160,24 @@ def bubble(
     tail_right: bool,
     max_width: float,
     max_lines: int = 3,
+    panel_scale: float = 1.0,
 ) -> Bubble:
-    """A wrapped bubble: rounded panel, a tail, and the ink inside it."""
+    """A wrapped bubble: rounded panel, a tail, and the ink inside it.
+
+    *cap* is the cap height of the type; *panel_scale* pads the panel relative to the
+    type. They are separate on purpose: shrinking the type must not shrink the bubble,
+    because a smaller bubble is harder to read than smaller letters inside a comfortable
+    one.
+    """
     lines, cap = fit(text, cap, max_width, max_lines)
     ink = text_mask(lines, cap)
     ink_h, ink_w = ink.shape
 
-    pad_x = round(PAD_X * cap)
-    pad_y = round(PAD_Y * cap)
-    tail_h = round(TAIL_H * cap) + 2
-    radius = RADIUS * cap
+    scale = cap * panel_scale
+    pad_x = round(PAD_X * scale)
+    pad_y = round(PAD_Y * scale)
+    tail_h = round(TAIL_H * scale) + 2
+    radius = RADIUS * scale
 
     w = ink_w + 2 * pad_x
     body_h = ink_h + 2 * pad_y
@@ -185,7 +196,7 @@ def bubble(
     ys, xs = np.mgrid[0:h, 0:w]
     span = np.clip((ys - body_h) / max(tail_h, 1), 0.0, 1.0)
     centre = base_x + (tip_x - base_x) * span
-    half = (1.0 - span) * TAIL_W * cap * 0.5
+    half = (1.0 - span) * TAIL_W * scale * 0.5
     tail = np.where(ys >= body_h, np.abs(xs - centre) - half, 1e9)
     panel = np.minimum(panel, tail)
 

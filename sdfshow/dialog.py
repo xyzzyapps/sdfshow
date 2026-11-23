@@ -24,7 +24,7 @@ from .md import table_after
 
 # Longest bubble line that still fits inside a panel at the default size. A longer
 # line is a data error rather than a silently cramped bubble.
-MAX_CHARS = 34
+MAX_CHARS = 48
 
 
 @dataclass(frozen=True)
@@ -225,6 +225,30 @@ def emit_bubble_templates(show, gen_dir: Path, fields_dir: Path) -> list[str]:
     return written
 
 
+def _seats(show, width: int) -> dict[str, bool]:
+    """Map each speaker to left (True) or right (False), from their field's ``cx``.
+
+    Reading the seat from the field means the bubble tail follows the character rather
+    than assuming two speakers in two fixed places, which matters once a scene has more
+    people in it.
+    """
+    import re
+
+    seats: dict[str, bool] = {}
+    try:
+        text = show.fields_md.read_text(encoding="utf-8")
+    except OSError:
+        return seats
+    for row in re.findall(
+        r"^\|\s*(\w+)\s*\|\s*[\w.]+\.glsl\s*\|\s*([^|]*)\|", text, re.MULTILINE
+    ):
+        name, params = row[0], row[1]
+        match = re.search(r"cx\s*=\s*(-?[\d.]+)", params)
+        if match:
+            seats[name.upper()] = float(match.group(1)) < 0.0
+    return seats
+
+
 def overlay_plan(show, gen_dir: Path):
     """Build every bubble's masks and return the placements for the overlay pass.
 
@@ -245,17 +269,25 @@ def overlay_plan(show, gen_dir: Path):
     bar = show.clock.bar
 
     plan = []
+    font = float(show.stage_value("font") or 0.042)
+    panel = float(show.stage_value("panel") or 1.0)
+    # A speaker's seat is where their field sits, so the tail points at the right person
+    # even with more than two of them. Falls back to alternating sides.
+    seats = _seats(show, width)
     for index, line in enumerate(lines):
-        cap = max(10, round(height * 0.042))
-        # The tail points back at its speaker: left seat points left, right points right.
-        left_seat = show.dialogue and (index % 2 == 0)
+        cap = max(8, round(height * font))
+        left_seat = seats.get(line.speaker, index % 2 == 0)
         item = textmask.bubble(
-            line.text, cap, tail_right=not left_seat, max_width=width * 0.40
+            line.text,
+            cap,
+            tail_right=not left_seat,
+            max_width=width * 0.34,
+            panel_scale=panel,
         )
         bw, bh = item.size
-        # Seat the bubble above the speaker's head, inside the frame.
-        x = round(width * (0.14 if left_seat else 0.56))
-        y = round(height * 0.16)
+        # Seat the bubble above its speaker's head, inside the frame.
+        x = round(width * (0.10 if left_seat else 0.56))
+        y = round(height * 0.13)
         x = min(x, width - bw - 4)
         np.save(masks / f"{index:02d}_panel.npy", item.panel)
         np.save(masks / f"{index:02d}_ink.npy", item.ink)

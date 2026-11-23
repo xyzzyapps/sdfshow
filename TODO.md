@@ -24,7 +24,21 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,
       `vapoursynth config`, compile, frame, render and parity all pass)
 
-## Done: 2D pixel-art mode (shows/pixel)
+## Done: two settings and four characters (shows/pixel)
+
+Sections now drives the *setting*, not just the cast: the diner furniture and the
+living-room furniture are both in the Fields table and only one set is active per
+section. Bars 0-8 are the diner, 8-20 are the house.
+
+- [x] shows/pixel: diner (booth, table, cup) then house (sofa, rug, lamp, chair)
+- [x] four characters: Aina, Boris, Dora, Ellis, each with its own head shape and hair
+- [x] sofa2d, lamp2d, seat2d, 	able2d, window2d templates
+- [x] ont and panel Stage keys: type size and bubble padding are independent
+- [x] fixed: the first text line was clipped above the canvas
+- [x] calmer mouth animation (a small pulse, not a full open/close)
+- [ ] shows/diner and shows/bar are now superseded; delete them
+
+## Old: 2D pixel-art mode
 
 mode: 2d is a second renderer: no raymarch, no camera, no normals. Every field is a
 flat shape in screen space and the frame is painted back-to-front, so the Fields table

@@ -215,6 +215,10 @@ def assemble_2d(show: Show, fields: Fields) -> str:
     layer that contains the sample paints over what is behind it, so the picture is
     painter's algorithm over distance fields, with no raymarch at all.
 
+    The ``Sections`` table still applies: a field whose cell is ``x`` in the current
+    section is not drawn, which is how a scene changes who is on screen without
+    duplicating a show.
+
     That is what makes a pixel-art look affordable: one field evaluation per layer per
     pixel, so the whole frame can be quantised to a pixel grid without the cost of a
     march. It also means a 2D template is just a shape - a circle, a box, a polygon -
@@ -227,16 +231,33 @@ def assemble_2d(show: Show, fields: Fields) -> str:
     outline_rgb = _vec3(show.stage_value("outline_color"), "outline_color")
     background = _vec3(show.stage_value("background"), "background")
 
-    # Back-to-front: later fields are drawn on top, matching the Fields table order
-    # read as a z-stack (first row is furthest back).
-    paints = "\n".join(
-        f"    d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0);\n"
-        f"    if (d < -o) {{ col = c[{i}]; }}\n"
-        f"    else if (d < 0.0) {{ col = mix({outline_rgb}, c[{i}], "
-        f"smoothstep(0.0, o, -d)); }}"
-        for i, name in enumerate(order)
-    )
+    # One paint block per section, each listing only the fields active in that range.
+    # Back-to-front within a block, matching the Fields table read as a z-stack.
+    bar = show.clock.bar
+    blocks: list[str] = []
+    for index, section in enumerate(show.sections):
+        last = index == len(show.sections) - 1
+        if not last:
+            head = (
+                f"{'if' if index == 0 else '} else if'} "
+                f"(t < {num(section.hi * bar)}) {{"
+            )
+        else:
+            head = "} else {" if index else "{"
+        body = "\n".join(
+            f"    if ({_cell_gate(section.cells[name], index, show)}) {{\n"
+            f"        d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0);\n"
+            f"        if (d < -o) {{ col = c[{i}]; }}\n"
+            f"        else if (d < 0.0) {{ col = mix({outline_rgb}, c[{i}], "
+            f"smoothstep(0.0, o, -d)); }}\n"
+            f"    }}"
+            for i, name in enumerate(order)
+        )
+        blocks.append(head + "\n" + body)
 
+    # Every block opens a branch; the final `}` closes the whole chain. Emitting it here,
+    # once, is what keeps the nesting balanced - a per-block close leaves the last branch
+    # dangling and the shader will not compile.
     return f"""\
 vec3 render_2d(vec2 uv, float t) {{
     vec3 c[{len(colours)}] = vec3[{len(colours)}]({", ".join(colours)});
@@ -244,10 +265,25 @@ vec3 render_2d(vec2 uv, float t) {{
     vec3 col = {background};
     float o = {outline};
     float d;
-{paints}
+{chr(10).join(blocks)}
+    }}
     return col;
 }}
 """
+
+
+def _cell_gate(cell, index: int, show: Show) -> str:
+    """A boolean expression that is true when *cell* draws its field.
+
+    ``active`` is all a 2D layer cares about: it either paints or it does not. A
+    ``m<w>`` morph in 2D would blend two flat colours, which has no meaning, so it is
+    treated as a fade-in gate on the morph weight.
+    """
+    if not cell.active:
+        return "false"
+    if cell.op == "m" and cell.k.strip():
+        return f"({cell.k.strip()}) > 0.5"
+    return "true"
 
 
 def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:

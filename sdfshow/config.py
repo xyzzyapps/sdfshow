@@ -41,6 +41,11 @@ STAGE_DEFAULTS: dict[str, str] = {
     "pixel": "1",
     "outline": "0",
     "outline_color": "0.06|0.05|0.08",
+    # Speech bubbles: `font` is the cap height as a fraction of frame height, `panel` pads
+    # the bubble relative to the type. They are independent so smaller letters do not
+    # force a smaller (harder to read) bubble.
+    "font": "0.042",
+    "panel": "1.0",
 }
 
 # Allowed `## Effects` pass names, in no particular order.
