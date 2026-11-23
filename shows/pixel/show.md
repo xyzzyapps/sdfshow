@@ -23,7 +23,8 @@ head, hair, white eyes, pupils, mouth; sofa, lamp, cushion. That is the same ide
 SVG document, and it is what makes the faces and the furniture read.
 
 bpm: 96
-bars: 20
+# The show ends with the last dialogue line: bar 20 is where it stops.
+bars: auto
 fps: 30
 size: 1280x720
 
@@ -70,21 +71,33 @@ Back to front. Diner furniture first, then house furniture, then the cast, then 
 | sofa |
 | rug |
 | lamp |
+| aina_legs |
+| aina_body |
+| aina_hands |
 | aina |
 | aina_hair |
 | aina_eye |
 | aina_pupil |
 | aina_mouth |
+| boris_legs |
+| boris_body |
+| boris_hands |
 | boris |
 | boris_hair |
 | boris_eye |
 | boris_pupil |
 | boris_mouth |
+| dora_legs |
+| dora_body |
+| dora_hands |
 | dora |
 | dora_hair |
 | dora_eye |
 | dora_pupil |
 | dora_mouth |
+| ellis_legs |
+| ellis_body |
+| ellis_hands |
 | ellis |
 | ellis_hair |
 | ellis_eye |
@@ -109,24 +122,36 @@ is the darkest red on the face, because it is the shape that moves.
 | sofa | 0.32\|0.52\|0.46 | none | 1.0 |
 | rug | 0.70\|0.42\|0.32 | none | 1.0 |
 | lamp | 0.98\|0.86\|0.44 | none | 1.0 |
-| aina | 0.99\|0.82\|0.64 | none | 1.0 |
+| aina_legs | 0.22\|0.24\|0.30 | none | 1.0 |
+| aina_body | 0.24\|0.42\|0.62 | none | 1.0 |
+| aina_hands | 0.98\|0.96\|0.93 | none | 1.0 |
+| aina | 0.98\|0.96\|0.93 | none | 1.0 |
 | aina_hair | 0.24\|0.15\|0.11 | none | 1.0 |
-| aina_eye | 0.99\|0.98\|0.95 | none | 1.0 |
+| aina_eye | 1.0\|1.0\|1.0 | none | 1.0 |
 | aina_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | aina_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
-| boris | 0.72\|0.54\|0.42 | none | 1.0 |
+| boris_legs | 0.26\|0.22\|0.22 | none | 1.0 |
+| boris_body | 0.62\|0.24\|0.22 | none | 1.0 |
+| boris_hands | 0.98\|0.96\|0.93 | none | 1.0 |
+| boris | 0.98\|0.96\|0.93 | none | 1.0 |
 | boris_hair | 0.88\|0.74\|0.32 | none | 1.0 |
-| boris_eye | 0.99\|0.98\|0.95 | none | 1.0 |
+| boris_eye | 1.0\|1.0\|1.0 | none | 1.0 |
 | boris_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | boris_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
-| dora | 0.96\|0.74\|0.54 | none | 1.0 |
+| dora_legs | 0.24\|0.22\|0.30 | none | 1.0 |
+| dora_body | 0.74\|0.62\|0.26 | none | 1.0 |
+| dora_hands | 0.98\|0.96\|0.93 | none | 1.0 |
+| dora | 0.98\|0.96\|0.93 | none | 1.0 |
 | dora_hair | 0.80\|0.34\|0.16 | none | 1.0 |
-| dora_eye | 0.99\|0.98\|0.95 | none | 1.0 |
+| dora_eye | 1.0\|1.0\|1.0 | none | 1.0 |
 | dora_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | dora_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
-| ellis | 0.86\|0.68\|0.52 | none | 1.0 |
+| ellis_legs | 0.22\|0.24\|0.26 | none | 1.0 |
+| ellis_body | 0.30\|0.48\|0.32 | none | 1.0 |
+| ellis_hands | 0.98\|0.96\|0.93 | none | 1.0 |
+| ellis | 0.98\|0.96\|0.93 | none | 1.0 |
 | ellis_hair | 0.62\|0.62\|0.58 | none | 1.0 |
-| ellis_eye | 0.99\|0.98\|0.95 | none | 1.0 |
+| ellis_eye | 1.0\|1.0\|1.0 | none | 1.0 |
 | ellis_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | ellis_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
 
@@ -135,12 +160,12 @@ is the darkest red on the face, because it is the shape that moves.
 The cut is at bar 8: the diner set goes away, the living room arrives, and the cast
 changes with it.
 
-| bars | sky | floor_diner | booth | table | cup | wall_house | floor_house | sofa | rug | lamp | aina | aina_hair | aina_eye | aina_pupil | aina_mouth | boris | boris_hair | boris_eye | boris_pupil | boris_mouth | dora | dora_hair | dora_eye | dora_pupil | dora_mouth | ellis | ellis_hair | ellis_eye | ellis_pupil | ellis_mouth |
-| ------ | ----- | ------------- | ------- | ------- | ------------ | ------------- | ------ | ----- | ------ | ------- | ----------- | ---------- | ----------- | ------------ | ------- | ------------ | ----------- | ------------ | ------------- | ------ | ----------- | ---------- | ----------- | ------------ | ------- | ------------ | ----------- | ------------ | ------------- | ----- |
-| 0-4 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x | x |
-| 4-8 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x |
-| 8-14 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x |
-| 14-20 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u |
+| bars | sky | floor_diner | booth | table | cup | wall_house | floor_house | sofa | rug | lamp | aina_legs | aina_body | aina_hands | aina | aina_hair | aina_eye | aina_pupil | aina_mouth | boris_legs | boris_body | boris_hands | boris | boris_hair | boris_eye | boris_pupil | boris_mouth | dora_legs | dora_body | dora_hands | dora | dora_hair | dora_eye | dora_pupil | dora_mouth | ellis_legs | ellis_body | ellis_hands | ellis | ellis_hair | ellis_eye | ellis_pupil | ellis_mouth |
+|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| 0-4 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x |
+| 4-8 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x |
+| 8-14 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x |
+| 14-20 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u |
 
 ## Dialogue
 
@@ -187,4 +212,4 @@ starts the frame the speaker's line starts. The shot list is wide, close, close,
 | mouth_e | expr | (t > 37.5 && t < 40.0) ? 0.30+0.22*sin(t*11.0) : (t > 42.5 && t < 45.0) ? 0.30+0.22*sin(t*11.0) : 0.03 | |
 | zoom | cuts | 0:1.0\|1:2.3\|2:2.2\|3:1.0\|5:2.1\|6:2.2\|7:1.0\|9:2.3\|10:2.2\|11:2.3\|13:2.1\|14:1.0\|15:2.2\|16:2.1\|17:2.2\|18:2.2 | |
 | focus_x | cuts | 0:0.0\|1:-0.44\|2:0.06\|3:0.0\|5:0.58\|6:0.06\|7:0.0\|9:-0.44\|10:0.06\|11:-0.44\|13:0.58\|14:0.0\|15:-0.72\|16:0.58\|17:-0.72\|18:0.06 | |
-| focus_y | cuts | 0:-0.12\|1:-0.08\|2:-0.08\|3:-0.12\|5:-0.08\|6:-0.08\|7:-0.12\|9:-0.08\|10:-0.08\|11:-0.08\|13:-0.08\|14:-0.12\|15:-0.08\|16:-0.08\|17:-0.08\|18:-0.08 | |
+| focus_y | cuts | 0:-0.10\|1:-0.06\|2:-0.06\|3:-0.10\|5:-0.06\|6:-0.06\|7:-0.10\|9:-0.06\|10:-0.06\|11:-0.06\|13:-0.06\|14:-0.10\|15:-0.06\|16:-0.06\|17:-0.06\|18:-0.06 | |

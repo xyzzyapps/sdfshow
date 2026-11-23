@@ -23,7 +23,7 @@ In scope:
 - a raymarched renderer with normals, ambient occlusion, soft shadows and fog;
 - a flat 2D renderer that paints SDF layers back-to-front in screen space, with a
   screen-space camera (cuts to close-ups), optional pixel quantise and per-layer
-  outlines (`mode: 2d`);
+  outlines (`mode: 2d`), and a show length that can be measured from the dialogue;
 - speech bubbles drawn from a numpy SDF stroke font and composited as an overlay,
   with synthesized dialogue audio (`## Dialogue`);
 - deterministic, seekable frames; versioned outputs; a build lock.
@@ -72,7 +72,9 @@ In scope for post-processing: a chain of generated pass shaders selected by a sh
 
 ## 3. Clock model
 
-From `show.md`:
+From `show.md`. `bars` is a number, or `auto` to end the show on the last `## Dialogue`
+bar (`ceil(max(line.hi))`):
+
 
 ```
 beat  = 60 / bpm
@@ -155,8 +157,10 @@ Module responsibilities:
 
 ## 5. Control surface A - `show.md`
 
-Required scalars: `bpm`, `bars`, `fps`. Optional: `size` (`WxH`, default 1280x720),
-`audio` (a path, reserved; not yet muxed into the render).
+Required scalars: `bpm`, `bars`, `fps`. `bars` is a number or `auto`; with `auto` it is
+derived from the `## Dialogue` table as `ceil(max(line.hi))`, so the show stops where
+the last line stops. Optional: `size` (`WxH`, default 1280x720), `audio` (a path,
+reserved; not yet muxed into the render).
 
 ### 5.1 Stage
 
@@ -479,10 +483,11 @@ So the `Fields` table reads top-to-bottom as a **z-stack**, exactly like the doc
 order of an SVG. The first row is furthest back. `Sections` decides which rows are
 drawn; a cell of `x` means the layer is absent.
 
-A layer is one flat fill, which is the central constraint of this mode: a face cannot
+A layer is one flat fill, which is the central constraint of this mode: a figure cannot
 be drawn as one shape with painted features, because there is no shading and no
-texture. Faces are therefore **several layers** - head, hair, eyes, brows, mouth -
-each with its own colour and its own row in the table. The same applies to furniture
+texture. A figure is therefore **several layers** - trousers, shirt, arms and hands,
+head, hair, sclera, pupils, mouth - each with its own colour and its own row in the
+table. The same applies to furniture
 (a window is a pane plus a frame). It is also how a cutout face is actually drawn:
 white sclera, dark pupils, a dark mouth, each a shape rather than a shade.
 
@@ -687,6 +692,8 @@ Automated (`pytest`):
 - the generated script chaining passes over `YUV444P16` with one `TIME0`;
 - 2D mode: `render_2d` is emitted instead of a march, layer order follows `Fields`,
   and a section cell of `x` removes the layer's paint block;
+- duration: `bars: auto` equals the last dialogue bar, fails without a Dialogue table,
+  and a numeric `bars` shorter than a line fails by name;
 - bubble masks: `wrap`/`fit` never exceed the line budget, `text_mask` places its
   first baseline inside the canvas (the clipping regression), `panel` scales the
   padding without changing the ink, and a tail lands on the requested side.
@@ -837,9 +844,10 @@ Manual / visual:
   perspective would need per-layer depths.
 - **2D mode has no operators.** `u<k>`, `s<k>` and `i<k>` lose their meaning: a layer
   paints or it does not. Cross-fades (`m`) degrade to a visibility test at `w > 0.5`.
-- **A 2D face is many layers.** Head, hair, eyes, brows and mouth are five rows per
-  character, and each row needs a colour and a cell in every section. That is the cost
-  of one fill per layer.
+- **A 2D figure is many layers.** Nine rows per character - trousers, shirt, arms and
+  hands, head, hair, sclera, pupils, mouth - and each row needs a colour and a cell in
+  every section. That is the cost of one fill per layer, and why the Sections table is
+  wide.
 - **Bubble text is capped at 48 characters.** Longer lines fail at parse time; there
   is no automatic reflow across two bubbles.
 - **flite voices are robotic.** They are legible and deterministic, which is enough
@@ -962,13 +970,17 @@ and costs one distance evaluation per layer per pixel. The alternative - depth t
 between layers - would need a depth per layer, a second value out of every template,
 and a sort; it buys nothing a table order cannot express.
 
-**One fill per layer, therefore many layers per face.** A cutout face is
-`head + hair + sclera + pupils + mouth`, five rows, five colours. That looks verbose
-next to a 3D face, which is one field with shading, but it is the same trade the
-format makes everywhere: the picture is a table, and every entry is inspectable. The
+**One fill per layer, therefore many layers per figure.** A cutout figure is
+`legs + body + arms + head + hair + sclera + pupils + mouth`, nine rows. That looks
+verbose next to a 3D figure, which is one field with shading, but it is the same trade
+the format makes everywhere: the picture is a table, and every entry is inspectable. The
 alternative - a template that returns a colour per pixel - would turn templates into
 mini-shaders and lose the single-return contract that makes them cheap to write and to
 test.
+
+**The show length can be the dialogue length.** `bars: auto` measures the last line and
+sets the clock from it. A trailer or an outro is a numeric `bars`; a dialogue scene
+should not make the author count bars and then keep the number in step by hand.
 
 **Close-ups are a zoom on the same stack, not a second scene.** A 2D show has no
 camera to move, but a sitcom is cut in shots. `zoom`/`focus_x`/`focus_y` scale and

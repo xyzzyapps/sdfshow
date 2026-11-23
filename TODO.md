@@ -69,6 +69,12 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] dialogue rewritten: dry, distinct voices, a running gag and a button
 - [x] female voice for Dora: `slt*0.92` (pitch-shifted with rubberband) instead of
       the male `awb`; the voice cell accepts `<voice>*<pitch>` and is tested
+- [x] cast restyle: one paper-white skin, shirts, arms with hands, two legs; the head
+      layer is the skull only (a neck painted over the shirt read as a beard)
+- [x] figure templates `body2d`, `arms2d`, `legs2d`; mirroring needs `abs` on the local
+      point, or the pair merges into one column
+- [x] `bars: auto`: the clock measures the last `## Dialogue` bar, so the show stops
+      with the dialogue; numeric `bars` still works, and a line past the end fails by name
 - [x] mouth tracks corrected to each speaker's own bar windows (they were one line out)
 - [x] `tests/test_textmask.py`: no clipping, wrap/fit budget, panel padding vs type,
       tail side

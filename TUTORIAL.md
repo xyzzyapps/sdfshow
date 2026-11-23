@@ -1108,9 +1108,9 @@ Three things follow from that loop, and they are the whole of 2D authoring:
 
 1. **Table order is depth.** The first row in `Fields` is furthest back. A character
    behind a table is listed before the table; there is no per-pixel depth test.
-2. **A layer is one flat fill.** A face is five rows - head, hair, white sclera,
-   pupils, mouth - because a single row cannot carry shading or a second colour. A
-   window is a pane plus a frame for the same reason.
+2. **A layer is one flat fill.** A figure is nine rows - trousers, shirt, arms and
+   hands, head, hair, white sclera, pupils, mouth - because a single row cannot carry
+   shading or a second colour. A window is a pane plus a frame for the same reason.
 3. **A cell is visibility, not an operator.** `x` means the layer is absent; `u` and
    `u<k>` both mean "draw it". Two flat fills cannot be min/maxed, so `s` and `i` are
    meaningless here and `m<w>` becomes a fade gate at `w > 0.5`.
@@ -1126,7 +1126,8 @@ one `Fields` table; only the active section's rows are drawn:
 That is the point of the show: a scene change is a section change, not a second
 show. The clock, the dialogue table and the render are shared.
 
-The four characters are distinguished by **silhouette**: Aina narrow with a bowl cut,
+The whole cast is paper-white; the shirts, hair and trousers are the palette. The four
+characters are distinguished by **silhouette**: Aina narrow with a bowl cut,
 Boris broad with a flat top, Dora long-haired, Ellis round and balding. Colour is a
 second cue, not the first, because a cutout has to read at a glance.
 
@@ -1170,6 +1171,10 @@ spike on the wrong side of the panel. The text is
 rasterised by `textmask.py` into a panel mask and an ink mask, and
 `render.py` composites them with `std.MaskedMerge` over the line's frame window. The
 shader never sees a glyph.
+
+The show's length is not a number to keep in step: `bars: auto` ends it on the last
+Dialogue bar, which is why the render is 50 seconds and the last line is the last thing
+said.
 
 `font` and `panel` are separate on purpose. `font` is the cap height as a fraction of
 frame height; `panel` is the padding as a multiple of the type size. An early version

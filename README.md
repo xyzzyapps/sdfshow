@@ -112,6 +112,9 @@ vspipe -c y4m  ->  ffmpeg (encode only)  ->  output/<name>/show.mp4
 | `dur` | `bars * bar` |
 | `frames` | `dur * fps` |
 
+`bars` may be a number or `auto`. `auto` measures the `## Dialogue` table and ends the
+show on the last line's final bar, so the animation stops when the talking does.
+
 Those durations are available in every template as `{{beat}}`, `{{bar}}`,
 `{{step}}`, `{{dur}}`. Index arithmetic is written where it belongs:
 `floor(t / {{bar}})`. The shader's clock is `t = (frame + TIME0) / FPS`, so frame
@@ -358,7 +361,10 @@ The shipped 2D templates:
 | `ellipse2d.glsl` | ellipse (`rx`, `ry`) |
 | `box2d.glsl` | rounded box (`hx`, `hy`, `round`) |
 | `capsule2d.glsl` | capsule |
-| `head2d.glsl` | a big head on a small body (`wide`, `shoulders`) |
+| `head2d.glsl` | one big oval skull, no neck (`wide`) |
+| `body2d.glsl` | the shirt: one rounded block (`shoulders`) |
+| `arms2d.glsl` | two arms with round hands, mirrored (`shoulders`) |
+| `legs2d.glsl` | two trouser legs, mirrored |
 | `hair2d.glsl` | one of four hair silhouettes (`style`, `fringe`) |
 | `face2d.glsl` | sclera, brows, mouth or pupils as separate layers (`kind`) |
 | `seat2d.glsl` | a booth bench (`hw`, `hh`) |
@@ -383,9 +389,11 @@ The shipped 2D templates:
 
 Three consequences worth knowing before writing a 2D show:
 
-- **A layer is one flat fill.** A face cannot be one shape with painted features, so
-  it is several rows - head, hair, white sclera, pupils, mouth - each with its own
-  colour. Furniture splits the same way (a window is a pane plus a frame).
+- **A layer is one flat fill.** A figure cannot be one shape with painted features, so
+  it is nine rows - trousers, shirt, arms and hands, head, hair, white sclera, pupils,
+  mouth - each with its own colour. The whole cast shares one paper-white skin; shirts,
+  hair and trousers carry the difference. Furniture splits the same way (a window is a
+  pane plus a frame).
 - **Cells are visibility, not operators.** `x` means the layer is absent; `u` and `u<k>`
   both mean "draw it"; `m<w>` is a fade gate at `w > 0.5`. min/max of two flat fills
   has no meaning.
@@ -492,7 +500,7 @@ characters fail the build rather than shrink below legibility.
 ## Checks
 
 ```powershell
-.venv\Scripts\python -m pytest -q        # 58 unit tests, no GPU needed
+.venv\Scripts\python -m pytest -q        # 68 unit tests, no GPU needed
 .venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
 ```
 
@@ -518,7 +526,7 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | the whole frame is black with `crt` | `curvature` is pushing the corners off-screen; lower it |
 | a kaleido fold hides the scene | the fold repeats the field, so raise `distance` or move `target` |
 | a 2D layer is missing | its `Sections` cell is `x`; a 2D layer is drawn only when its row is active |
-| a 2D character's face floats | head, hair, eyes, brows and mouth are separate rows; check their `cx`/`cy` agree |
+| a 2D character's face floats | trousers, shirt, arms, head, hair, sclera, pupils and mouth are separate rows; check their `cx`/`cy` agree |
 | the 2D picture has no shading | by design: a layer is one flat fill, and `outline` draws the rim |
 | text is clipped at the top of the bubble | the mask's baseline and canvas must derive from the same numbers; see `SPEC.md` §10.3 |
 | letters are too big but the bubble is right | lower `font` only; `panel` is the padding, independent of type size |
@@ -528,6 +536,8 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | a close-up shows the wrong character | `focus_x` at that bar is another speaker's `cx`; the shots are `cuts` keys |
 | faces look flat and mouthless | a mouth is one layer over the head; check its `kind=2` row is active and its track moves |
 | a hair cap covers the eyes | raise `fringe`; it is the lowest q.y the cap reaches |
+| the show runs past the last line | `bars: auto` ends it on the final Dialogue bar |
+| two legs render as one wide column | mirror with `abs` on the local point inside the box formula |
 
 ## Project layout
 

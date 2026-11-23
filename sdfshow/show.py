@@ -19,6 +19,7 @@ start a row, because there is nothing to blend from.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -192,15 +193,38 @@ def parse(name: str, path: Path) -> Show:
             raise SystemExit(f"show.md: 'size' must be WxH (got '{size}')")
         width, height = int(match.group(1)), int(match.group(2))
 
+    dialogue = dialog.parse(text)
+    bars_text = scalar["bars"].strip().lower()
+    if bars_text in ("auto", "dialogue"):
+        # The show ends where its speech ends. This makes "stop after the dialogue" a
+        # property of the markdown instead of a number kept in step by hand.
+        if not dialogue:
+            raise SystemExit("show.md: bars: auto needs a ## Dialogue table to measure")
+        bars = math.ceil(max(line.hi for line in dialogue))
+    else:
+        try:
+            bars = int(float(bars_text))
+        except ValueError:
+            raise SystemExit(
+                f"show.md: 'bars' must be a number or 'auto' (got '{scalar['bars']}')"
+            ) from None
+
     clock = Clock(
         bpm=float(scalar["bpm"]),
-        bars=int(float(scalar["bars"])),
+        bars=bars,
         fps=int(float(scalar["fps"])),
         width=width,
         height=height,
     )
     if clock.bpm <= 0 or clock.bars <= 0 or clock.fps <= 0:
         raise SystemExit("show.md: bpm, bars and fps must be positive")
+
+    for line in dialogue:
+        if line.hi > clock.bars:
+            raise SystemExit(
+                f"show.md: dialogue '{line.text[:24]}...' ends at bar {line.hi}, "
+                f"past the last bar ({clock.bars}); raise 'bars' or use 'auto'"
+            )
 
     order = [row[0] for row in rows(text, ["field"]) if row and row[0]]
     if not order:
@@ -213,7 +237,7 @@ def parse(name: str, path: Path) -> Show:
         clock=clock,
         stage=kv_table(text),
         fields_order=order,
-        dialogue=dialog.parse(text),
+        dialogue=dialogue,
         audio=scalar.get("audio", ""),
     )
 
