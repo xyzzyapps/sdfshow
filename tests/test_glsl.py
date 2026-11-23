@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sdfshow import config as C
 from sdfshow.clock import Clock
 from sdfshow.fields import load
@@ -130,9 +132,9 @@ size: 320x180
 def test_kaleido_fold_is_generated(tmp_path):
     """A kaleido fold duplicates space into mirrored sectors."""
     text = _folded_scene(tmp_path, "| fold | kaleido |\n| fold_count | 8 |")
-    assert "float sector = TAU / 8.0;" in text
+    assert "float sector = TAU / max(8.0, 2.0);" in text
     assert "a = abs(a);" in text
-    assert "p = fold_space(p);" in text
+    assert "p = fold_space(p, t);" in text
 
 
 def test_mirror_fold_is_generated(tmp_path):
@@ -164,3 +166,22 @@ def test_effect_parameters_are_numeric_literals():
     assert "smoothstep(0.2, 1.0, lum)" in text
     assert "* 1.5" in text
     assert "* 4.0" in text
+
+
+def test_effect_knobs_may_be_tracks():
+    """An effect pass can be animated by the scene's tracks."""
+    from sdfshow.md import tables
+    from sdfshow.tracks import parse_tracks
+
+    clock = Clock(bpm=120.0, bars=8, fps=30, width=960, height=540)
+    text_src = (
+        "## Tracks\n\n| name | kind | values |\n|---|---|---|\n"
+        "| gain | keys | 0:0.2\\|4:1.2 |\n"
+    )
+    tracks = parse_tracks(text_src, tables(text_src))
+    text = assemble_effect("bloom", {"strength": "gain"}, clock, tracks)
+    assert "float track_gain(float t)" in text
+    assert "k * track_gain(t)" in text
+
+    with pytest.raises(SystemExit, match="unknown identifier 'nope'"):
+        assemble_effect("bloom", {"strength": "nope"}, clock, tracks)

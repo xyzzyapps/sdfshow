@@ -123,8 +123,13 @@ def _simple(text: str, values: dict[str, str], field_name: str) -> str:
     return _PLACEHOLDER.sub(repl, text)
 
 
-def load(path: Path, clock) -> Fields:
-    """Parse ``fields.md`` and render every field body for *clock*."""
+def load(path: Path, clock, extra_tracks: str = "") -> Fields:
+    """Parse ``fields.md`` and render every field body for *clock*.
+
+    *extra_tracks* is the show's ``show.md`` text: a ``## Tracks`` table may live in
+    either file, so camera tracks can sit next to the Stage table and field tracks
+    next to the fields. A name defined in both files is an error.
+    """
     text = path.read_text(encoding="utf-8")
     scalar = scalars(text)
     banned = [key for key in _CLOCKS if key in scalar]
@@ -137,6 +142,16 @@ def load(path: Path, clock) -> Fields:
 
     globals_ = _expand({**scalar, **clock.tokens()}, "globals")
     tracks = parse_tracks(text, tables(text))
+    if extra_tracks:
+        extra = parse_tracks(extra_tracks, tables(extra_tracks))
+        clash = sorted(set(extra) & set(tracks))
+        if clash:
+            raise SystemExit(
+                "tracks.md: '"
+                + "', '".join(clash)
+                + "' is defined in both fields.md and show.md"
+            )
+        tracks = {**tracks, **extra}
 
     read = tables(text)
     body_rows: list[list[str]] = []

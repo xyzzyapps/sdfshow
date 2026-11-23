@@ -179,7 +179,7 @@ def expression(value: str, tracks: dict[str, Track]) -> str:
     raise: the shader is never emitted with a name that cannot resolve.
     """
     if _NUMBER.match(value.strip()):
-        return value.strip()
+        return num(float(value.strip()))
     allowed = set(tracks) | GLSL_WORDS
     for match in _TOKEN.finditer(value):
         token = match.group(0)

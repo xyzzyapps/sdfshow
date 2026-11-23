@@ -8,10 +8,13 @@ order-dependent because a distance field composes by ``min``/``max``:
 ``u<k>``   smooth union with blend radius *k*
 ``s<k>``   smooth subtraction
 ``i<k>``   smooth intersection
+``m<w>``   morph: ``mix`` the accumulated field towards this one by *w*
 ``x``      absent
 
-Row order is semantic: the table is applied top to bottom, and the first union in
-a row becomes that row's base field.
+The operand after the operator may be a number or a track name, so a blend radius or
+a morph weight can be animated. Row order is semantic: the table is applied top to
+bottom, and the first union in a row becomes that row's base field. A morph cannot
+start a row, because there is nothing to blend from.
 """
 
 from __future__ import annotations
@@ -24,10 +27,11 @@ from . import config as C
 from .clock import Clock
 from .md import kv_table, rows, scalars, table_after
 
-_CELL = re.compile(r"^(?P<op>[usix])(?P<k>[0-9]*\.?[0-9]+)?$")
+_CELL = re.compile(r"^(?P<op>[usixm])(?P<k>.*)$")
 _RANGE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
 
 PATTERNS = ("none", "checker", "grid", "stripes")
+OPS = ("u", "s", "i", "x", "m")
 
 
 @dataclass(frozen=True)
@@ -50,10 +54,15 @@ def pattern_id(name: str) -> int:
 
 @dataclass(frozen=True)
 class Cell:
-    """One arrangement cell: a composition operator and its blend radius."""
+    """One arrangement cell: a composition operator and its blend operand.
+
+    ``k`` is the raw text after the operator - empty, a number, or a track name
+    (``u0.3``, ``m<morph>``). It is resolved to GLSL at assembly time so a cell
+    blend can be animated.
+    """
 
     op: str
-    k: float = 0.0
+    k: str = ""
 
     @property
     def active(self) -> bool:
@@ -62,7 +71,11 @@ class Cell:
 
 
 def cell(text: str, where: str = "") -> Cell:
-    """Parse an arrangement cell (``u``, ``u0.35``, ``s0.1``, ``i``, ``x``)."""
+    """Parse an arrangement cell.
+
+    ``u``/``u<k>`` union, ``s<k>`` subtract, ``i<k>`` intersect, ``m<w>`` morph
+    (``mix``), ``x`` absent. The operand may be a number or a track name.
+    """
     raw = text.strip().lower()
     if raw in ("", "x", "0"):
         return Cell("x")
@@ -71,9 +84,15 @@ def cell(text: str, where: str = "") -> Cell:
         raise SystemExit(
             f"show.md: bad section cell '{text}'"
             + (f" in {where}" if where else "")
-            + " (use u, u<k>, s<k>, i<k> or x)"
+            + " (use u, u<k>, s<k>, i<k>, m<w> or x)"
         )
-    return Cell(match.group("op"), float(match.group("k") or 0.0))
+    operand = match.group("k").strip()
+    if operand and not re.fullmatch(r"[A-Za-z0-9_+*/(). ]+", operand):
+        raise SystemExit(
+            f"show.md: bad cell operand '{operand}' in '{text}'"
+            + (f" ({where})" if where else "")
+        )
+    return Cell(match.group("op"), operand)
 
 
 @dataclass
@@ -253,12 +272,6 @@ def parse(name: str, path: Path) -> Show:
         raise SystemExit(
             f"show.md: stage 'fold' must be none/mirror/kaleido (got '{fold}')"
         )
-    try:
-        count = float(show.stage_value("fold_count"))
-    except ValueError as exc:
-        raise SystemExit("show.md: stage 'fold_count' must be a number") from exc
-    if count < 2:
-        raise SystemExit("show.md: stage 'fold_count' must be at least 2")
 
     if not show.sections:
         # No arrangement: every field is unioned for the whole show.

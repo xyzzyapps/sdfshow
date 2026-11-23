@@ -37,9 +37,11 @@ def _write(tmp_path, rows: str) -> Show:
 def test_cells():
     """Every operator form parses, and blanks are absent cells."""
     assert cell("u").op == "u"
-    assert cell("u0.35").k == 0.35
+    assert cell("u0.35").k == "0.35"
     assert cell("s0.1").op == "s"
     assert cell("i").op == "i"
+    assert cell("m0.5").k == "0.5"
+    assert cell("mw").k == "w"
     assert cell("x").active is False
     assert cell("").active is False
 
@@ -48,6 +50,86 @@ def test_bad_cell_raises():
     """A cell that is not an operator fails loudly."""
     with pytest.raises(SystemExit):
         cell("union-ish")
+    with pytest.raises(SystemExit):
+        cell("q0.4")
+
+
+def test_morph_cell_generates_a_mix(tmp_path):
+    """An `m` cell blends one field into the accumulator, driven by a track."""
+    text = BASE.replace("{rows}", "| 0-4 | u | mw |")
+    path = tmp_path / "show.md"
+    path.write_text(text, encoding="utf-8")
+    show = parse("test", path)
+    assert show.sections[0].cells["ring"].op == "m"
+
+    from sdfshow.fields import load
+    from sdfshow.glsl import assemble
+
+    fields_md = tmp_path / "fields.md"
+    fields_md.write_text(
+        "## Fields\n\n| name | template | parameters |\n|---|---|---|\n"
+        "| core | sphere.glsl | radius=1, cx=0, cy=0, cz=0 |\n"
+        "| ring | sphere.glsl | radius=1.4, cx=0, cy=0, cz=0 |\n"
+        "\n## Tracks\n\n| name | kind | values |\n|---|---|---|\n"
+        "| w | keys | 0:0\\|2:1 |\n",
+        encoding="utf-8",
+    )
+    shader = assemble(show, load(fields_md, show.clock))
+    assert "d = mix(d, field_ring(p, t), clamp(track_w(t), 0.0, 1.0));" in shader
+
+
+def test_morph_cannot_start_a_section(tmp_path):
+    """A morph needs something to blend from."""
+    with pytest.raises(SystemExit, match="first active field"):
+        _write(tmp_path, "| 0-4 | m0.5 | u |")
+
+
+def test_tracks_may_live_in_show_md(tmp_path):
+    """A show.md Tracks table is merged with fields.md's."""
+    from sdfshow.fields import load
+
+    show_md = tmp_path / "show.md"
+    show_md.write_text(
+        BASE.replace("{rows}", "| 0-4 | u | u |")
+        + "\n## Tracks\n\n| name | kind | values |\n|---|---|---|\n"
+        "| cam | keys | 0:1\\|2:3 |\n",
+        encoding="utf-8",
+    )
+    fields_md = tmp_path / "fields.md"
+    fields_md.write_text(
+        "## Fields\n\n| name | template | parameters |\n|---|---|---|\n"
+        "| core | sphere.glsl | radius=1, cx=0, cy=0, cz=0 |\n"
+        "| ring | sphere.glsl | radius=2, cx=0, cy=0, cz=0 |\n",
+        encoding="utf-8",
+    )
+    show = parse("test", show_md)
+    fields = load(fields_md, show.clock, show_md.read_text(encoding="utf-8"))
+    assert "cam" in fields.tracks
+
+
+def test_duplicate_track_across_files_raises(tmp_path):
+    """The same track name in both files is an error, not a silent override."""
+    from sdfshow.fields import load
+
+    show_md = tmp_path / "show.md"
+    show_md.write_text(
+        BASE.replace("{rows}", "| 0-4 | u | u |")
+        + "\n## Tracks\n\n| name | kind | values |\n|---|---|---|\n"
+        "| cam | keys | 0:1\\|2:3 |\n",
+        encoding="utf-8",
+    )
+    fields_md = tmp_path / "fields.md"
+    fields_md.write_text(
+        "## Fields\n\n| name | template | parameters |\n|---|---|---|\n"
+        "| core | sphere.glsl | radius=1, cx=0, cy=0, cz=0 |\n"
+        "| ring | sphere.glsl | radius=2, cx=0, cy=0, cz=0 |\n"
+        "\n## Tracks\n\n| name | kind | values |\n|---|---|---|\n"
+        "| cam | keys | 0:9\\|2:9 |\n",
+        encoding="utf-8",
+    )
+    show = parse("test", show_md)
+    with pytest.raises(SystemExit, match="defined in both"):
+        load(fields_md, show.clock, show_md.read_text(encoding="utf-8"))
 
 
 def test_sections_cover_the_show(tmp_path):
@@ -55,7 +137,7 @@ def test_sections_cover_the_show(tmp_path):
     show = _write(tmp_path, "| 0-2  | u | x |\n| 2-4 | u | u0.3 |")
     assert show.clock.frames == 240
     assert len(show.sections) == 2
-    assert show.sections[1].cells["ring"].k == 0.3
+    assert show.sections[1].cells["ring"].k == "0.3"
 
 
 def test_section_gap_raises(tmp_path):

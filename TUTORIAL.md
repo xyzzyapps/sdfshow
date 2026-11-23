@@ -19,10 +19,11 @@ without reading the source first.
 - [11. Walkthrough: `shows/first`](#11-walkthrough-showsfirst)
 - [12. Walkthrough: `shows/demo`](#12-walkthrough-showsdemo)
 - [13. Walkthrough: `shows/ops`](#13-walkthrough-showsops)
-- [14. Recipes](#14-recipes)
-- [15. Debugging](#15-debugging)
-- [16. Limits and pitfalls](#16-limits-and-pitfalls)
-- [17. Glossary](#17-glossary)
+- [14. Walkthrough: `shows/reel`](#14-walkthrough-showsreel)
+- [15. Recipes](#15-recipes)
+- [16. Debugging](#16-debugging)
+- [17. Limits and pitfalls](#17-limits-and-pitfalls)
+- [18. Glossary](#18-glossary)
 
 ---
 
@@ -412,7 +413,16 @@ is found by its `## Sections` heading, so prose tables cannot be mistaken for da
 | `u0.3` | smooth union, blend radius 0.3 |
 | `s0.2` | smooth subtraction |
 | `i0.1` | smooth intersection |
+| `m0.5` | morph: cross-fade the accumulator towards this field |
 | `x` or blank | absent |
+
+The operand after any operator may be a number **or a track name**, so a blend radius
+or a morph weight animates: `u0.3`, `mkick`, `m0.5`.
+
+A morph is a cross-fade between two distances, and the average of two distances is not
+a distance. It looks right when both fields occupy the same space (concentric solids);
+use a section boundary for a scene change. `shows/ops` and `shows/reel` both rely on
+that rule.
 
 Rules, all enforced:
 
@@ -543,8 +553,10 @@ no statement syntax; if you need conditionals or loops, put them in a template o
 | spin  | expr  | 0.45+0.12*t       |             |
 ```
 
-Tracks are defined in `fields.md` (not `show.md`). The table is recognised by its
-first three headers. The fourth column is optional.
+A `## Tracks` table may live in `fields.md` **or** `show.md`; both are read and merged.
+Put camera and effect tracks next to the Stage table in `show.md`, and field tracks
+next to the fields in `fields.md`. A name defined in both files is an error. The table
+is recognised by its first three headers; the fourth column is optional.
 
 | kind | values | options |
 |------|--------|---------|
@@ -660,6 +672,7 @@ return (p.y - h) * 0.6;   // approximate: scaled down to stay a bound
 | `menger.glsl` | Menger sponge | `cx cy cz half spin iterations` | yes |
 | `gyroid.glsl` | gyroid shell in a sphere | `spin scale shrink thickness radius` | no |
 | `pillars.glsl` | ring of columns | `ring count radius center_y half_height` | no |
+| `spheres.glsl` | ring of `count` spheres | `cx cy cz radius count spin orb` | yes |
 | `mandelbulb.glsl` | mandelbulb distance estimate | `cx cy cz power iterations` | no |
 
 "Exact" means the function returns at most the true distance, so the marcher cannot
@@ -1037,7 +1050,28 @@ Two things to notice:
 The `chop` track is a `steps` track with `span=2`, so its four values each last half
 a bar. That is the smallest useful demonstration that `span` works.
 
-## 14. Recipes
+`shows/reel` is the long one: 30 seconds, five scenes, a Menger-to-gyroid morph, an
+animated kaleido fold and a shifting effect chain.
+
+| bars  | what happens |
+|-------|--------------|
+| 0-3   | ring tunnel, camera creeping forward |
+| 3-7   | Menger sponge over the floor, camera whipping out |
+| 7-8   | the sponge morphs into a gyroid |
+| 8-9   | gyroid alone |
+| 9-12  | orb cluster (a sphere multiplied by the kaleido fold) |
+| 12-13 | orbs plus the colonnade |
+| 13-15 | the cluster morphs into the striped sun |
+
+Two lessons are baked into that table:
+
+- The morph is `m<track>`, and a morph cross-fades two *distances*. It only reads
+  correctly between concentric solids, so the reel morphs Menger to gyroid and orbs to
+  sun, and uses a section boundary everywhere else.
+- `fold_count` is a track, so the kaleido ripple is a value in the Stage table, not a
+  new template.
+
+## 15. Recipes
 
 ### 12.1 Checkerboard floor
 
@@ -1118,7 +1152,7 @@ value at the boundary.
 
 ---
 
-## 15. Debugging
+## 16. Debugging
 
 ### 13.1 Compile first
 
@@ -1208,7 +1242,7 @@ If a render of yours is ever non-reproducible:
 
 ---
 
-## 16. Limits and pitfalls
+## 17. Limits and pitfalls
 
 - **GPU float is not portable.** Two vendors may produce slightly different pixels
   from the same shader. Within one machine and driver it is stable.
@@ -1234,6 +1268,13 @@ If a render of yours is ever non-reproducible:
   template if you need it locally.
 - **Mandelbulb is expensive.** Six iterations multiply the per-sample cost inside a
   160-step march. It works, but it is not a default.
+- **Fold applies to everything, and it interacts with templates.** `fold` wraps every
+  field, so a template that repeats space internally (`pillars`, `spheres`, the tunnel)
+  and a global kaleido fold multiply each other. A template that also rotates its own
+  point out of the fold sector will appear to vanish as time advances; `spheres.glsl`
+  documents the correct order.
+- **A morph is not a topology change.** `m` cross-fades two distances and only reads
+  correctly between concentric solids.
 - **`#` at line start in a template is a Markdown comment**, so GLSL preprocessor
   directives cannot be written there. Template bodies do not need them.
 - **Scalars are single tokens.** `fps: 30 # comment` is not a scalar line and will
@@ -1245,7 +1286,7 @@ If a render of yours is ever non-reproducible:
 
 ---
 
-## 17. Glossary
+## 18. Glossary
 
 - **Bar** - four beats. **Beat** - `60/bpm` seconds. **Step** - a 16th note.
 - **Cell** - one arrangement entry: a composition operator and optional blend
@@ -1279,10 +1320,10 @@ frame    -> output/<show>/frame_NNNNN.png
 render   -> output/<show>/show.mp4 (versioned), logs/
 clips    -> output/<show>/clips/scene_NN_bars_A-B.mp4 (one per section)
 
-cells:   u   u<k>   s<k>   i<k>   x
+cells:   u   u<k>   s<k>   i<k>   m<w>   x
 tracks:  steps (span, ease) | bars (ease) | keys (bar:value) | expr (GLSL over t)
-folds:   none | mirror | kaleido (+ fold_count)
-effects: bloom | chroma | crt | glitch
+folds:   none | mirror | kaleido (+ fold_count, may be a track)
+effects: bloom | chroma | crt | glitch (knobs may be tracks)
 clock:   t = (frame + TIME0)/FPS ; BAR, BEAT, STEP, DUR in seconds
 
 checks:  pytest -q ; python tests/gpu_parity.py

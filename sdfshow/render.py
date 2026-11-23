@@ -19,7 +19,9 @@ from .show import Show
 
 def compile_show(show: Show) -> Path:
     """Generate ``gen/<show>/scene.glsl`` and ``gen/<show>/score.json``."""
-    fields = fields_mod.load(show.fields_md, show.clock)
+    fields = fields_mod.load(
+        show.fields_md, show.clock, show.show_md.read_text(encoding="utf-8")
+    )
     defined = {f.name for f in fields.fields}
     wanted = set(show.fields_order)
     if defined != wanted:
@@ -38,7 +40,7 @@ def compile_show(show: Show) -> Path:
     if show.effects:
         for index, name in enumerate(show.effects, start=1):
             effect = glsl.assemble_effect(
-                name, show.effect_params.get(name, {}), show.clock
+                name, show.effect_params.get(name, {}), show.clock, fields.tracks
             )
             (show.gen / f"fx_{index}_{name}.glsl").write_text(effect, encoding="utf-8")
 

@@ -14,11 +14,11 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] per-field material ids, colour, patterns (`checker`/`grid`/`stripes`), scale
 - [x] screen pass: `scanlines`, `plasma`, `grain`, `vignette`, `hue`
 - [x] space folds: `fold: none|mirror|kaleido`, `fold_count`
-- [x] effect passes: `bloom`, `chroma`, `crt`, `glitch` (generated GLSL chain)
+- [x] effect passes: `bloom`, `chroma`, `crt`, `glitch` (generated GLSL chain)\n- [x] morph cells (`m<w>`), animatable cell operands, `fold_count` as a track\n- [x] effect knobs as tracks; tracks may live in either `show.md` or `fields.md`
 - [x] templates: sphere, box, capsule, torus, cylinder, cone, hexprism, plane_wave,
       terrain, helix, tunnel, menger, gyroid, pillars, mandelbulb
 - [x] prelude: `vnoise`, `fbm`, `hash13`, `apply_pattern`, `hue_rotate`
-- [x] shows: `first`, `ring`, `demo`, `ops`, `post`
+- [x] shows: `first`, `ring`, `demo`, `ops`, `post`, `reel` (30 s)
 - [x] docs: `README.md`, `SPEC.md`, `TUTORIAL.md`
 - [x] GPU parity check (`tests/gpu_parity.py`, max error 0.0076 vs 0.01 tolerance)
 - [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,

@@ -44,11 +44,13 @@ fails without it. Development extras (pytest, ruff, black):
 ```
 
 `shows/demo` is the demoscene set (ring tunnel, Menger sponge, gyroid, striped sun
-and a column hall):
+and a column hall). `shows/reel` is the long one: 30 seconds, five scenes, morphs,
+an animated kaleido fold and a shifting effect chain.
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
 .venv\Scripts\python -m sdfshow render --show demo
+.venv\Scripts\python -m sdfshow render --show reel
 ```
 
 - `compile` writes `gen/first/scene.glsl` and `gen/first/score.json`.
@@ -189,6 +191,10 @@ previous pass, so nothing leaves GLSL and nothing is re-marched.
 Order is first appearance in the table. Every pass is seekable because `TIME0` is
 injected into each one.
 
+A knob may be a **track name** as well as a number, so the treatment can follow the
+music: `| glitch | chance | glitch_amt |` with `glitch_amt` a `keys` track. The
+track functions are emitted into the pass that needs them.
+
 ### Composition cells
 
 A distance field does not mix by addition the way audio does, so a section cell is
@@ -200,11 +206,19 @@ an operator, not a gain:
 | `u0.3` | smooth union, blend radius `0.3` |
 | `s0.2` | smooth subtraction |
 | `i0.1` | smooth intersection |
+| `m0.5` | morph: `mix` the accumulated field towards this one |
 | `x` | absent |
 
-Row order is semantic: cells are applied left to right, and the first *active*
-cell in a row must be a union (there is nothing to subtract from otherwise - the
-build rejects it).
+The operand may be a **number or a track name**, so a blend radius or a morph
+weight can be animated: `mwg` blends by `track_wg(t)`, clamped to 0..1.
+
+`m` is a cross-fade between two distance values, and the average of two distances is
+not a distance, so a morph looks right only when both fields occupy the same space
+(concentric solids). Use it for a shape change in place, not for a scene change.
+
+Row order is semantic: cells are applied left to right, and the first *active* cell
+in a row must be a union (a morph has nothing to blend from otherwise - the build
+rejects it).
 
 ### `fields.md`
 
@@ -224,6 +238,10 @@ build rejects it).
 | spin        | expr  | 0.45+0.12*t                                |             |
 | ring_radius | bars  | 1.15\|1.35\|1.25\|1.15\|1.3\|1.5\|1.4\|1.25 | ease=smooth |
 ```
+
+A `## Tracks` table may live in **either** file. Put camera and effect tracks in
+`show.md` next to the Stage table, and field tracks in `fields.md`; a name defined in
+both is an error.
 
 There are **no defaults**. A template hole with no value fails the build and names
 the field and the key. An identifier in a parameter that is neither a track nor a
@@ -351,6 +369,7 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 sdfshow/        the Python package (parser, clock, codegen, renderer, CLI)
 fields/         GLSL SDF template library
 shows/first/    the worked example (8 bars, 120 BPM)
+shows/reel/     the 30-second reel: tunnel, Menger, gyroid, orbs, sun (morphs, folds, effects)
 shows/demo/     the demoscene set (tunnel, Menger, gyroid, sun and columns)
 shows/ops/      subtract and intersect operators, plus a span=2 steps track
 shows/post/     a one-bar probe of the effect chain

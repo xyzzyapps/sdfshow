@@ -17,7 +17,8 @@ import colorsys
 from . import config as C
 from .fields import Fields, render_functions
 from .show import Show, pattern_id
-from .tracks import expression, num
+from .tracks import Track, expression, num
+from .tracks import glsl as track_glsl
 
 _SMIN = """\
 float smin(float a, float b, float k) {
@@ -117,23 +118,23 @@ float fbm(vec3 p) {
 """
 
 
-def _fold(mode: str, count: float) -> str:
-    """Generate the space fold applied before every field."""
+def _fold(mode: str, count: str) -> str:
+    """Generate the space fold applied before every field. *count* is GLSL."""
     if mode == "none":
-        return "vec3 fold_space(vec3 p) { return p; }\n"
+        return "vec3 fold_space(vec3 p, float t) { return p; }\n"
     if mode == "mirror":
         return (
-            "vec3 fold_space(vec3 p) {\n"
+            "vec3 fold_space(vec3 p, float t) {\n"
             "    p.x = abs(p.x);\n"
             "    p.z = abs(p.z);\n"
             "    return p;\n"
             "}\n"
         )
     return (
-        "vec3 fold_space(vec3 p) {\n"
+        "vec3 fold_space(vec3 p, float t) {\n"
         "    float a = atan(p.z, p.x);\n"
         "    float r = length(p.xz);\n"
-        f"    float sector = TAU / {num(count)};\n"
+        f"    float sector = TAU / max({count}, 2.0);\n"
         "    a = mod(a + 0.5 * sector, sector) - 0.5 * sector;\n"
         "    a = abs(a);\n"
         "    p.x = cos(a) * r;\n"
@@ -179,6 +180,18 @@ def _material_colour(index: int, name: str, show: Show) -> str:
     return f"vec3({num(r)}, {num(g)}, {num(b)})"
 
 
+def _operand(cell, fields: Fields, field_name: str) -> str:
+    """A cell operand as GLSL: empty -> 0.0, a number, or a track expression."""
+    raw = cell.k.strip()
+    if not raw:
+        return "0.0"
+    try:
+        return num(float(raw))
+    except ValueError:
+        pass
+    return expression(raw, fields.tracks)
+
+
 def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
     """The nested ``if`` over the arrangement, shared by map and material passes."""
     bar = show.clock.bar
@@ -188,14 +201,17 @@ def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
     for index, section in enumerate(show.sections):
         last = index == len(show.sections) - 1
         if not last:
-            head = f"{'if' if index == 0 else '} else if'} (t < {num(section.hi * bar)}) {{"
+            head = (
+                f"{'if' if index == 0 else '} else if'} "
+                f"(t < {num(section.hi * bar)}) {{"
+            )
         else:
             head = "} else {" if index else "{"
         lines.append(head)
         if material:
             for field_name in order:
                 cell = section.cells[field_name]
-                if cell.op != "u":
+                if cell.op not in ("u", "m"):
                     continue
                 field_index = order.index(field_name)
                 fn = by_name[field_name].function
@@ -214,12 +230,16 @@ def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
             if base:
                 lines.append(f"    d = {fn}(p, t);")
                 base = False
-            elif cell.op == "u":
-                lines.append(f"    d = smin(d, {fn}(p, t), {num(cell.k)});")
+                continue
+            k = _operand(cell, fields, field_name)
+            if cell.op == "u":
+                lines.append(f"    d = smin(d, {fn}(p, t), {k});")
             elif cell.op == "s":
-                lines.append(f"    d = smax(d, -{fn}(p, t), {num(cell.k)});")
+                lines.append(f"    d = smax(d, -{fn}(p, t), {k});")
             elif cell.op == "i":
-                lines.append(f"    d = smax(d, {fn}(p, t), {num(cell.k)});")
+                lines.append(f"    d = smax(d, {fn}(p, t), {k});")
+            elif cell.op == "m":
+                lines.append(f"    d = mix(d, {fn}(p, t), clamp({k}, 0.0, 1.0));")
         if base:
             lines.append("    d = 1e9;")
     lines.append("}")
@@ -290,7 +310,7 @@ vec3 camera_ray(vec2 uv, float t) {{
 
     scene = f"""\
 float map_scene(vec3 p, float t) {{
-    p = fold_space(p);
+    p = fold_space(p, t);
     float d = 1e9;
 {_section_chain(show, fields)}
     return d;
@@ -375,7 +395,7 @@ vec3 render(vec2 uv, float t) {{
     vec3 col = bg;
     if (hit > 0.5) {{
         vec3 p = ro + rd * travel;
-        vec3 fp = fold_space(p);
+        vec3 fp = fold_space(p, t);
         vec3 base = mat_color(mat_id(fp, t), fp, t);
         vec3 n = calc_normal(p, t);
         float ao = calc_ao(p, n, t);
@@ -411,9 +431,10 @@ vec3 render(vec2 uv, float t) {{
 {_PATTERN}
 {_NOISE}
 {_TRANSFORMS}
-{_fold(show.stage_value("fold").strip().lower(), float(show.stage_value("fold_count")))}
 
 {render_functions(fields)}
+
+{_fold(show.stage_value("fold").strip().lower(), _motion(show, fields, "fold_count"))}
 
 {scene}
 {camera}
@@ -442,24 +463,65 @@ _EFFECT_DEFAULTS: dict[str, dict[str, str]] = {
 }
 
 
-def _effect_num(name: str, params: dict[str, str], key: str) -> str:
-    """One numeric effect parameter with its default applied."""
+def _effect_num(
+    name: str, params: dict[str, str], key: str, tracks: dict[str, Track] | None = None
+) -> str:
+    """One effect parameter as GLSL: a number, or a track expression.
+
+    Effect passes are shaders too, so a knob may be animated by the same tracks the
+    scene uses. The track functions are emitted into every pass that needs them.
+    """
     raw = params.get(key, _EFFECT_DEFAULTS[name][key])
     try:
         return num(float(raw))
-    except ValueError as exc:
+    except ValueError:
+        pass
+    if tracks is None:
         raise SystemExit(
-            f"show.md: effect '{name}' parameter '{key}' must be a number"
-        ) from exc
+            f"show.md: effect '{name}' parameter '{key}' must be a number "
+            f"(got '{raw}')"
+        )
+    return expression(raw, tracks)
 
 
-def assemble_effect(name: str, params: dict[str, str], clock) -> str:
+def _effect_tracks(
+    name: str, params: dict[str, str], tracks: dict[str, Track] | None
+) -> str:
+    """The track functions an effect pass needs, or an empty string."""
+    if not tracks:
+        return ""
+    used = []
+    for key, default in _EFFECT_DEFAULTS[name].items():
+        raw = params.get(key, default)
+        for token in used_tokens(raw):
+            if token in tracks and tracks[token] not in used:
+                used.append(tracks[token])
+    return "\n".join(track_glsl(track) for track in used)
+
+
+def used_tokens(value: str) -> list[str]:
+    """Identifier tokens in a small GLSL expression (for dependency collection)."""
+    from .tracks import _TOKEN
+
+    return [m.group(0) for m in _TOKEN.finditer(value) if m.group(0)[0].isalpha()]
+
+
+def assemble_effect(
+    name: str,
+    params: dict[str, str],
+    clock,
+    tracks: dict[str, Track] | None = None,
+) -> str:
     """Build one libplacebo post-pass shader.
 
     Effect passes read the previous pass through ``HOOKED_tex``; they never touch
     the SDF. ``TIME0`` is injected into every pass so animated effects (glitch)
     stay seekable.
     """
+    knobs = {
+        key: _effect_num(name, params, key, tracks) for key in _EFFECT_DEFAULTS[name]
+    }
+    helpers = _effect_tracks(name, params, tracks)
     if name == "bloom":
         body = f"""\
     vec4 c = HOOKED_tex(HOOKED_pos);
@@ -468,21 +530,21 @@ def assemble_effect(name: str, params: dict[str, str], clock) -> str:
     float wsum = 0.0;
     for (int y = -2; y <= 2; y++) {{
         for (int x = -2; x <= 2; x++) {{
-            vec2 o = vec2(float(x), float(y)) * {_effect_num(name, params, "radius")};
+            vec2 o = vec2(float(x), float(y)) * {knobs["radius"]};
             float w = 1.0 / (1.0 + dot(o, o));
             b += HOOKED_texOff(o).rgb * w;
             wsum += w;
         }}
     }}
     b /= wsum;
-    float k = smoothstep({_effect_num(name, params, "threshold")}, 1.0, lum);
-    return vec4(c.rgb + b * k * {_effect_num(name, params, "strength")}, 1.0);
+    float k = smoothstep({knobs["threshold"]}, 1.0, lum);
+    return vec4(c.rgb + b * k * {knobs["strength"]}, 1.0);
 """
     elif name == "chroma":
         body = f"""\
     vec4 c = HOOKED_tex(HOOKED_pos);
     vec2 d = HOOKED_pos - 0.5;
-    vec2 o = d * dot(d, d) * {_effect_num(name, params, "amount")};
+    vec2 o = d * dot(d, d) * {knobs["amount"]};
     vec3 col;
     col.r = HOOKED_tex(HOOKED_pos + o).r;
     col.g = c.g;
@@ -493,7 +555,7 @@ def assemble_effect(name: str, params: dict[str, str], clock) -> str:
         body = f"""\
     vec2 d = HOOKED_pos - 0.5;
     float r2 = dot(d, d);
-    vec2 pos = 0.5 + d * (1.0 + {_effect_num(name, params, "curvature")} * r2);
+    vec2 pos = 0.5 + d * (1.0 + {knobs["curvature"]} * r2);
     if (pos.x < 0.0 || pos.x > 1.0 || pos.y < 0.0 || pos.y > 1.0) {{
         return vec4(0.0, 0.0, 0.0, 1.0);
     }}
@@ -501,13 +563,12 @@ def assemble_effect(name: str, params: dict[str, str], clock) -> str:
 """
     elif name == "glitch":
         body = f"""\
-    float t = (float(frame) + TIME0) / FPS;
     float band = floor(HOOKED_pos.y * 28.0);
-    float tick = floor(t * {_effect_num(name, params, "rate")});
+    float tick = floor(t * {knobs["rate"]});
     float n = hash11(band * 1.37 + tick * 7.1);
     vec2 pos = HOOKED_pos;
-    if (n > 1.0 - {_effect_num(name, params, "chance")}) {{
-        pos.x += (hash11(band + tick * 3.3) - 0.5) * {_effect_num(name, params, "amount")};
+    if (n > 1.0 - {knobs["chance"]}) {{
+        pos.x += (hash11(band + tick * 3.3) - 0.5) * {knobs["amount"]};
     }}
     vec3 col;
     col.r = HOOKED_tex(pos + vec2(0.0015, 0.0)).r;
@@ -525,12 +586,19 @@ def assemble_effect(name: str, params: dict[str, str], clock) -> str:
 // @TIME0@
 
 #define FPS {num(float(clock.fps))}
+#define BAR {num(clock.bar)}
+#define BEAT {num(clock.beat)}
+#define STEP {num(clock.step)}
+#define DUR {num(clock.duration)}
+#define PI 3.14159265358979
+#define TAU 6.28318530717959
 #ifndef TIME0
 #define TIME0 0.0
 #endif
 
 float hash11(float n) {{ return fract(sin(n * 127.1) * 43758.5453); }}
 
-vec4 hook() {{
+{helpers}vec4 hook() {{
+    float t = (float(frame) + TIME0) / FPS;
 {body}}}
 """

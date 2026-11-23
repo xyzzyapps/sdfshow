@@ -159,11 +159,13 @@ arithmetic over tracks and `t`.
 | `vignette` | screen pass: radial darkening | `0.22` |
 | `hue` | rotate every material colour around grey | `0` |
 | `fold` | space fold before every field: `none`, `mirror`, `kaleido` | `none` |
-| `fold_count` | sectors for `fold: kaleido` (>= 2) | `6` |
+| `fold_count` | sectors for `fold: kaleido` (>= 2); may be a track | `6` |
 
-`fold` is implemented as `vec3 fold_space(vec3 p)`, called by `map_scene` and by the
-material pass. `mirror` takes `abs` on x and z; `kaleido` folds the XZ angle into one
-sector of `TAU/fold_count` and reflects it. An unknown mode fails at parse time.
+`fold` is implemented as `vec3 fold_space(vec3 p, float t)`, called by `map_scene` and
+by the material pass. `mirror` takes `abs` on x and z; `kaleido` folds the XZ angle
+into one sector of `TAU/fold_count` and reflects it. `fold_count` is a GLSL
+expression, so it may be a track (the ripple in `shows/reel`). An unknown mode fails
+at parse time.
 
 Camera basis:
 
@@ -204,10 +206,18 @@ documentation table cannot be mistaken for data.
 3. The last section ends at `bars`.
 4. Every Fields entry has a cell in every section.
 5. Every Sections column names a field in the Fields table.
-6. The first active cell of a section is a union (`u` or `u<k>`).
+6. The first active cell of a section is a union (`u` or `u<k>`); a morph cannot
+   start a section because there is nothing to blend from.
 
-Cells: `u`, `u<k>`, `s<k>`, `i<k>`, `x`. A blank cell is `x`. `0` is accepted as
-`x` for readability.
+Cells: `u`, `u<k>`, `s<k>`, `i<k>`, `m<w>`, `x`. A blank cell is `x`. `0` is
+accepted as `x` for readability. The operand may be a number **or a track name**,
+resolved through the same expression validator as field parameters, so a blend radius
+or a morph weight can be animated. Generated code: `smin(d, f, k)`,
+`smax(d, -f, k)`, `smax(d, f, k)`, `mix(d, f, clamp(w, 0.0, 1.0))`.
+
+`m` is a cross-fade between two distances, and the average of two distances is not a
+distance, so it is only meaningful when both fields occupy the same space
+(concentric solids). Documented as a limitation, not hidden.
 
 ### 5.5 Effects
 
@@ -225,9 +235,9 @@ defaults.
 
 Generated per pass: `gen/<show>/fx_<n>_<name>.glsl`, a complete `//!HOOK MAIN`
 shader that samples the previous pass through `HOOKED_tex`. Each carries the
-`// @TIME0@` sentinel, so animated effects stay seekable. All parameters are
-validated as numbers; an unknown effect name or a non-numeric value fails at parse
-time.
+`// @TIME0@` sentinel and the clock defines, so animated effects stay seekable. A
+parameter value may be a **track name**; the pass emits the track functions it needs.
+An unknown effect name or an unknown identifier fails at parse time.
 
 ---
 
@@ -266,6 +276,12 @@ or `h` is an error: those come from `show.md`.
 
 Track names are unique and become `track_<name>`. `expr` is the escape hatch: its
 contents are not token-validated (it may use any GLSL expression).
+
+A `## Tracks` table may live in **either** `show.md` or `fields.md`; both are read and
+merged, and a name defined in both is an error. Camera and effect tracks therefore sit
+next to the Stage table they feed, and field tracks next to the fields they drive.
+Tracks are emitted after the prelude and before `fold_space`, because a fold count or
+a camera value may reference one.
 
 ---
 
@@ -606,6 +622,7 @@ Manual / visual:
 | `fields/*.glsl` | yes | template library |
 | `fields/README.md` | yes | template-language guide |
 | `shows/first/{show,fields}.md` | yes | worked example |
+| `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |
 | `shows/demo/{show,fields}.md` | yes | demoscene set (tunnel, Menger, gyroid, sun, columns) |
 | `shows/ops/{show,fields}.md` | yes | subtract/intersect operators, `span=2` steps |
 | `shows/post/{show,fields}.md` | yes | all four effect passes on one sphere |
@@ -682,6 +699,19 @@ and `TIME0` is injected into all of them so the chain stays seekable. `Deband` a
 every field, in both the distance and the material pass. That gives a whole-scene
 kaleidoscope for one line of Markdown. The cost is that a fold cannot be applied to
 one object only, which is documented as a limitation rather than hidden.
+
+**Morph is a cross-fade, not a topology change.** `m<w>` emits `mix(d, f, w)`. That
+is the cheapest possible morph and it is honest about its limit: the average of two
+distances is not a distance, so it only looks right when both fields occupy the same
+space. A real shape morph needs a correspondence between surfaces, which is a much
+larger feature. The reel uses `m` for concentric solids and a hard section boundary for
+scene changes, and the documentation says so.
+
+**One order-of-operations trap worth recording.** In `fields/spheres.glsl` the sample
+point is folded into an angular sector *before* the sphere is evaluated, and the spin
+is applied to the resulting point. Rotating first and folding second makes the sphere
+drift out of the sector as time advances, so the object silently leaves the view. That
+ordering bug cost several iterations to find; the template now documents it.
 
 **Prior art.** Shader Park (JS DSL -> GLSL SDF, headless converters), ISF (a JSON
 header declaring `audio`/`audioFFT` inputs, i.e. the shader/host contract),
