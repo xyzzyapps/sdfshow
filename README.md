@@ -305,6 +305,10 @@ table, not from ffmpeg.
   Frame *n* is reproducible, and `--from`/`--to` renders line up with the full one.
 - x264 is run with `-threads 1`, so two renders of the same show on the same machine
   produce **byte-identical MP4s** (verified by hash).
+- `vspipe` is run with `-r 1` (one frame request in flight). With the default
+  parallel requests, the first frame or two of a run can differ from a repeat run,
+  and every downstream frame inherits the difference through H.264. Serialising
+  requests removes it; the cost is negligible next to the raymarch.
 - GPU float behaviour is not bit-identical across vendors. Within one machine and
   driver a render is stable; across machines, compare with a tolerance.
 - Noise is seeded from the frame index and the pixel position, not from
@@ -336,6 +340,7 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | the ring/square is missing | check the `Sections` cell; a visual is only present when its row is active |
 | a frame is empty background | the camera starts inside a solid (a floor, a column); raise the camera or move the geometry |
 | `another sdfshow build is running` | wait, or delete the stale lock file |
+| two renders differ by a few hundred bytes | check `-r 1` is still passed to vspipe; without it the first frames can vary |
 | an effect pass has no visible change | check the `## Effects` table: rows merge per effect, and order is first appearance |
 | the whole frame is black with `crt` | `curvature` is pushing the corners off-screen; lower it |
 | a kaleido fold hides the scene | the fold repeats the field, so raise `distance` or move `target` |

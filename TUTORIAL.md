@@ -1184,10 +1184,27 @@ number means a clock or scene mismatch.
 ### 13.8 Determinism checks
 
 - `compile` twice: `scene.glsl` must be byte-identical.
-- Render twice: with `-threads 1`, the MP4s are byte-identical on the same machine
-  and driver.
+- Render twice: with `-threads 1` on x264 and `-r 1` on vspipe, the MP4s are
+  byte-identical on the same machine and driver.
 - A still at time *T* and the first frame of a clip starting at *T* must match
   (compression aside).
+
+### 13.9 A determinism gotcha worth knowing
+
+Before `-r 1` was added, two renders of the same show differed. The cause was not
+the shader: `vspipe` issues several frame requests in parallel, and the first one or
+two frames of a run could come back slightly different. Decoding both files showed
+the difference confined to frames 1-2, at about 40 dB PSNR. H.264 then carried it
+through the rest of the file, so a hash comparison failed.
+
+If a render of yours is ever non-reproducible:
+
+1. compare the two Y4M streams, not just the MP4s:
+   `vspipe -c y4m -r 1 gen/<show>/render.vpy out.y4m`
+2. use `psnr=stats_file=...` (a relative path, run from the folder) to see which
+   frames differ;
+3. a difference confined to the first frames is a frame-request ordering effect; a
+   difference spread evenly is a shader change.
 
 ---
 

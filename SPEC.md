@@ -418,16 +418,20 @@ identical across renders.
 Encoding:
 
 ```
-vspipe -c y4m -s A -e B gen/<s>/render.vpy -
+vspipe -r 1 -c y4m -s A -e B gen/<s>/render.vpy -
   | ffmpeg -f yuv4mpegpipe -i - [-i audio] -c:v libx264 -preset slow -crf 18
            -pix_fmt yuv420p -threads 1 -movflags +faststart output/<s>/show.mp4
 ```
 
 `-threads 1` is deliberate. With threaded rate control, x264 can make different
 decisions on identical input, so two renders of the same show would differ by a few
-hundred bytes. Single-threaded x264 makes the encoded file byte-identical; the cost
-is small at these sizes (480 frames of 960x540 in about 15 s on the reference
-machine).
+hundred bytes. Single-threaded x264 makes the encoded file byte-identical.
+
+`-r 1` is the second half of the same guarantee. With the default parallel frame
+requests, the first one or two frames of a run could differ from a repeat run: a GPU
+dispatch ordering effect, visible as a ~40 dB PSNR difference on frames 0-1 and then
+propagated through H.264. Serialising requests makes the Y4M stream byte-identical;
+measured cost on this machine is under 5% for the demo.
 
 ffmpeg is used only as an encoder/muxer. No ffmpeg filter touches the picture: all
 geometry and shading are the generated GLSL.
@@ -493,8 +497,11 @@ Manual / visual:
   when both are decoded to the same colour space (verified at 44 dB PSNR after
   H.264, i.e. compression-only difference);
 - a `--from`/`--to` render must equal the same frame range of the full render;
-- two full renders must be byte-identical (verified by file hash, with
-  `-threads 1`);
+- two full renders must be byte-identical (verified by file hash, with `-threads 1`
+  on x264 and `-r 1` on vspipe). This was found to be false before `-r 1`: the first
+  one or two Y4M frames could differ between runs (about 40 dB PSNR on frames 0-1),
+  which H.264 then propagated. Both plain and effect-pass shows are now verified
+  byte-identical.
 - a repeat `compile` must be byte-identical.
 
 ---

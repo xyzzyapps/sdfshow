@@ -145,6 +145,12 @@ def _encode(
         str(C.VSPIPE),
         "-c",
         "y4m",
+        # One frame request in flight. With the default parallel requests, the
+        # first one or two frames of a run can differ from a repeat run (a GPU
+        # dispatch ordering effect), which breaks byte-identical renders. The
+        # cost is negligible next to the raymarch.
+        "-r",
+        "1",
         "-s",
         str(start),
         "-e",
