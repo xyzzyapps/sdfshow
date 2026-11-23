@@ -22,8 +22,9 @@ without reading the source first.
 - [14. Walkthrough: `shows/reel`](#14-walkthrough-showsreel)
 - [15. Recipes](#15-recipes)
 - [16. Debugging](#16-debugging)
-- [17. Limits and pitfalls](#17-limits-and-pitfalls)
-- [18. Glossary](#18-glossary)
+- [17. How the pieces fit together](#17-how-the-pieces-fit-together)
+- [18. Limits and pitfalls](#18-limits-and-pitfalls)
+- [19. Glossary](#19-glossary)
 
 ---
 
@@ -1154,13 +1155,13 @@ value at the boundary.
 
 ## 16. Debugging
 
-### 13.1 Compile first
+### 16.1 Compile first
 
 `compile` is cheap and catches most mistakes: unknown identifiers, missing
 placeholders, bad sections, missing templates. If it succeeds, open
 `gen/<show>/scene.glsl` and confirm the function you care about is there.
 
-### 13.2 One frame is a fast loop
+### 16.2 One frame is a fast loop
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame --show demo --at 26 --out check.png
@@ -1169,7 +1170,7 @@ placeholders, bad sections, missing templates. If it succeeds, open
 Frames are versioned by default (`frame_00780.png`, `frame_00780_v2.png`); pass
 `--out` to control the name.
 
-### 13.3 Shader compile errors
+### 16.3 Shader compile errors
 
 vs-placebo prints the whole generated shader with line numbers to
 `output/<show>/logs/vspipe.log`. The shader begins after roughly 80 lines of
@@ -1183,7 +1184,7 @@ Common causes:
 - an array size that is not a constant
 - a template line that split a token when the lines were joined
 
-### 13.4 An empty frame
+### 16.4 An empty frame
 
 If the image is only background, the camera is probably inside a solid. The
 march guard turns that into a clean miss instead of garbage. Check
@@ -1191,13 +1192,13 @@ march guard turns that into a clean miss instead of garbage. Check
 camera is at y = -1.8, which is below a floor at -1.3. Raise the camera, reduce the
 pitch, or lower the floor.
 
-### 13.5 A missing object
+### 16.5 A missing object
 
 Check the `Sections` cell: a field is only present while its row is active. Then
 check the distance: an approximate template with a too-large `shrink` can skip the
 surface and produce holes or invisibility. Reduce `shrink`.
 
-### 13.6 Comparing a still with a video
+### 16.6 Comparing a still with a video
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame --show demo --at 24.8 --out ref.png
@@ -1208,14 +1209,14 @@ ffmpeg -i f0.png -i ref.png -lavfi psnr -f null -
 A PSNR around 40 dB means the difference is H.264 compression only. A much lower
 number means a clock or scene mismatch.
 
-### 13.7 Logs and locks
+### 16.7 Logs and locks
 
 - `output/<show>/logs/vspipe.log` - shader compile errors and frame counts.
 - `output/<show>/logs/ffmpeg.log` - encoder errors.
 - `output/<show>/logs/.build.lock` - exists only while a build runs. If a build
   crashed, delete it.
 
-### 13.8 Determinism checks
+### 16.8 Determinism checks
 
 - `compile` twice: `scene.glsl` must be byte-identical.
 - Render twice: with `-threads 1` on x264 and `-r 1` on vspipe, the MP4s are
@@ -1223,7 +1224,7 @@ number means a clock or scene mismatch.
 - A still at time *T* and the first frame of a clip starting at *T* must match
   (compression aside).
 
-### 13.9 A determinism gotcha worth knowing
+### 16.9 A determinism gotcha worth knowing
 
 Before `-r 1` was added, two renders of the same show differed. The cause was not
 the shader: `vspipe` issues several frame requests in parallel, and the first one or
@@ -1242,7 +1243,105 @@ If a render of yours is ever non-reproducible:
 
 ---
 
-## 17. Limits and pitfalls
+## 17. How the pieces fit together
+
+The earlier chapters each explain one part. This one is the whole machine in one
+place, because the parts only make sense together.
+
+### 17.1 The data flow
+
+```
+shows/<show>/show.md      shows/<show>/fields.md      fields/*.glsl
+   clock, stage,             fields, parameters,        GLSL function
+   arrangement,              tracks                     bodies with {{holes}}
+   materials, effects
+        \                        |                         /
+         +-----------+-----------+------------+
+                     |
+                     |  sdfshow compile
+                     v
+        gen/<show>/scene.glsl        one //!HOOK MAIN shader
+        gen/<show>/fx_<n>_*.glsl     one shader per effect pass
+        gen/<show>/score.json        resolved clock + sections (audit)
+                     |
+                     |  sdfshow render
+                     v
+        gen/<show>/render.vpy        VapourSynth: BlankClip -> Shader -> Shader
+                     |
+                     |  vspipe -r 1 -c y4m
+                     v
+        ffmpeg (encode only)  ->  output/<show>/show.mp4
+```
+
+For the reel specifically that is a 482-line, 17.7 KB `scene.glsl` plus four passes
+of 0.6-1.4 KB each. Scaled to the whole project: 12 Python modules, about 74 KB,
+of which `glsl.py` (19 KB) is the largest because it owns shader assembly.
+
+### 17.2 Why composition is not addition
+
+An SDF is one number per point, so fields combine with `min`/`max`, never with `+`.
+That single fact is why the Markdown looks the way it does:
+
+| an audio tool would | sdfshow does |
+|---|---|
+| multiply stem gains | apply an operator per field |
+| `1.00`, `0.60`, `0.00` | `u`, `u0.6`, `x` |
+| sum the stems | fold into one accumulator with `smin` / `smax` |
+
+A `## Sections` cell is therefore an **operator**, and row order is semantic. This is
+the design decision everything else follows from; `SPEC.md` §8 has the algebra.
+
+### 17.3 Why each pass is generated GLSL
+
+VapourSynth offers `Expr`, `Convolution`, `AverageFrames`, `MaskedMerge`, `Deband`
+and more. sdfshow uses only three filters - `BlankClip` as a frame carrier,
+`placebo.Shader` per pass, `resize` at the end - and generates every effect as another
+libplacebo hook.
+
+The reason is that the alternative is a second effects language, with a second set of
+colour-space rules and a picture that is half shader and half filter graph. Keeping
+one language means one artifact to read (`gen/`), one place a bug lives, and `TIME0`
+injected consistently into every pass. The trade is recorded in `SPEC.md` §16.
+
+### 17.4 Why the clock is a frame index
+
+`t = (frame + TIME0) / fps`, never wall-clock and never accumulated. That is what
+makes a still at time *T* identical to the frame at *T* in a video, and a `--from`
+clip identical to the same range of the full render. `TIME0` exists because a
+libplacebo hook counts frames from zero per session, so a render starting at frame *N*
+must be told its absolute offset. Break that and every seek silently replays the show
+from zero.
+
+### 17.5 Why determinism took two fixes
+
+Claiming "a render is a pure function of the Markdown" required:
+
+- **`-threads 1` on x264** - threaded rate control makes different decisions on
+  identical input, so repeat renders differed by a few hundred bytes;
+- **`-r 1` on vspipe** - parallel frame requests let the first frames of a run differ
+  (~40 dB PSNR), which H.264 then propagated through the whole file.
+
+The second was invisible from MP4 hashes alone; it was found by comparing Y4M
+streams. See §16.9 for the diagnostic recipe.
+
+### 17.6 Package layout
+
+| module | responsibility |
+|--------|----------------|
+| `md.py` | one Markdown reader: scalars, tables, escaped pipes, heading lookup |
+| `clock.py` | bpm/bars/fps -> beat, bar, step, duration, frames |
+| `show.py` | `show.md`: stage, fields order, materials, effects, folds, cells |
+| `fields.py` | `fields.md`: globals, parameters, template substitution |
+| `tracks.py` | track parsing, parameter-expression validation, track GLSL |
+| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, effects |
+| `render.py` | compile, pass chain, VapourSynth script, vspipe/ffmpeg |
+| `proc.py` | build lock, quiet subprocess execution |
+| `config.py` | paths, stage defaults, effort and encode constants |
+| `cli.py` | `compile`, `frame`, `render`, `clips`, `shows` |
+
+---
+
+## 18. Limits and pitfalls
 
 - **GPU float is not portable.** Two vendors may produce slightly different pixels
   from the same shader. Within one machine and driver it is stable.
@@ -1286,7 +1385,7 @@ If a render of yours is ever non-reproducible:
 
 ---
 
-## 18. Glossary
+## 19. Glossary
 
 - **Bar** - four beats. **Beat** - `60/bpm` seconds. **Step** - a 16th note.
 - **Cell** - one arrangement entry: a composition operator and optional blend

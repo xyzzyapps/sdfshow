@@ -5,6 +5,7 @@ description = "Render signed-distance-field shows from Markdown: tempo, bars and
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["vapoursynth", "vs-placebo"]
+license = { file = "LICENSE.md" }
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "black"]
