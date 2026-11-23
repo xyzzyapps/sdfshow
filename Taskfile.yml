@@ -1,0 +1,36 @@
+version: '3'
+
+vars:
+  PY: .venv/Scripts/python.exe
+
+tasks:
+  lint:
+    desc: ruff + black --check
+    cmds:
+      - '{{.PY}} -m ruff check sdfshow tests'
+      - '{{.PY}} -m black --check sdfshow tests'
+
+  format:
+    desc: format the package with black
+    cmds:
+      - '{{.PY}} -m black sdfshow tests'
+
+  test:
+    desc: run the test suite
+    cmds:
+      - '{{.PY}} -m pytest -q'
+
+  compile:
+    desc: 'generate gen/<show>/scene.glsl (show=first)'
+    cmds:
+      - '{{.PY}} -m sdfshow compile --show {{.show | default "first"}}'
+
+  frame:
+    desc: 'render one PNG (show=first at=0)'
+    cmds:
+      - '{{.PY}} -m sdfshow frame --show {{.show | default "first"}} --at {{.at | default "0"}}'
+
+  render:
+    desc: 'render the show (show=first)'
+    cmds:
+      - '{{.PY}} -m sdfshow render --show {{.show | default "first"}}'

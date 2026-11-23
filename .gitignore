@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# generated shader sources (the templates are the source of truth)
+gen/
+
+# renders, frame caches and logs
+output/
