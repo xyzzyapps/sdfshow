@@ -26,6 +26,23 @@ def _add_show(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _clips(show, seconds: float, lead: float, out: Path | None) -> None:
+    """Render one short clip per section, skipping the cut-in ramp."""
+    bar = show.clock.bar
+    out_dir = out or (show.output / "clips")
+    for index, section in enumerate(show.sections):
+        span = section.hi * bar - section.lo * bar
+        start = section.lo * bar + min(lead, 0.25 * span)
+        end = min(start + seconds, section.hi * bar)
+        if end - start < 0.5:
+            continue
+        target = config.unique_path(
+            out_dir / f"scene_{index:02d}_bars_{section.lo}-{section.hi}.mp4"
+        )
+        path = render_mod.render(show, start=start, end=end, out=target)
+        print(f"clip: {path}")
+
+
 def main(argv: list[str] | None = None) -> None:
     """Parse the command line and run the selected command."""
     parser = argparse.ArgumentParser(
@@ -54,6 +71,19 @@ def main(argv: list[str] | None = None) -> None:
     rend.add_argument("--to", dest="end", type=float, default=None, help="end time (s)")
     rend.add_argument("--out", type=Path, default=None, help="output MP4 path")
 
+    clips = sub.add_parser("clips", help="render one short clip per section")
+    _add_show(clips)
+    clips.add_argument(
+        "--seconds", type=float, default=5.0, help="clip length (default: 5)"
+    )
+    clips.add_argument(
+        "--lead",
+        type=float,
+        default=0.8,
+        help="seconds to skip after the section starts (default: 0.8)",
+    )
+    clips.add_argument("--out", type=Path, default=None, help="output directory")
+
     ls = sub.add_parser("shows", help="list the shows under shows/")
     ls.set_defaults(command="shows")
 
@@ -75,3 +105,5 @@ def main(argv: list[str] | None = None) -> None:
         elif args.command == "render":
             path = render_mod.render(show, start=args.start, end=args.end, out=args.out)
             print(f"video: {path}")
+        elif args.command == "clips":
+            _clips(show, args.seconds, args.lead, args.out)

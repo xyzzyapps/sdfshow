@@ -68,3 +68,16 @@ turns. `hue` cycles the palette; `scanlines` and `plasma` are the CRT pass.
 | 4-8   | x      | u      | x      | x   | x       | u     |
 | 8-12  | x      | x      | u      | x   | x       | u     |
 | 12-16 | x      | x      | x      | u   | u       | u     |
+
+## Effects
+
+Post passes, in table order: bloom lifts the bright parts, chroma splits the colour
+channels radially, glitch offsets occasional bands.
+
+| effect | key       | value |
+|--------|-----------|-------|
+| bloom  | strength  | 0.55  |
+| bloom  | threshold | 0.60  |
+| chroma | amount    | 0.04  |
+| glitch | chance    | 0.03  |
+| glitch | amount    | 0.03  |

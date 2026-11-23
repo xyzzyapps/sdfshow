@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from sdfshow import config as C
+from sdfshow.clock import Clock
 from sdfshow.fields import load
-from sdfshow.glsl import assemble
+from sdfshow.glsl import assemble, assemble_effect
 from sdfshow.show import parse
 
 
@@ -86,3 +87,80 @@ def test_patterns_and_post_pass_are_generated():
     assert "vec3 post(vec3 col, vec2 uv, vec2 screen, float t)" in text
     assert "col *= 1.0 - 0.13 * sl;" in text  # scanlines from the demo's stage
     assert "hue_rotate(base," in text
+
+
+def _folded_scene(tmp_path, stage: str) -> str:
+    """Assemble a one-sphere show with a custom Stage table."""
+    clock = Clock(bpm=120.0, bars=2, fps=30, width=320, height=180)
+    show_md = tmp_path / "show.md"
+    fields_md = tmp_path / "fields.md"
+    show_md.write_text(
+        f"""bpm: 120
+bars: 2
+fps: 30
+size: 320x180
+
+## Stage
+| key | value |
+|-----|-------|
+{stage}
+
+## Fields
+| field |
+|-------|
+| core  |
+
+## Sections
+| bars | core |
+|------|------|
+| 0-2  | u    |
+""",
+        encoding="utf-8",
+    )
+    fields_md.write_text(
+        "## Fields\n\n| name | template | parameters |\n|---|---|---|\n"
+        "| core | sphere.glsl | radius=1, cx=0, cy=0, cz=0 |\n",
+        encoding="utf-8",
+    )
+    show = parse("fold", show_md)
+    assert show.clock == clock
+    return assemble(show, load(fields_md, show.clock))
+
+
+def test_kaleido_fold_is_generated(tmp_path):
+    """A kaleido fold duplicates space into mirrored sectors."""
+    text = _folded_scene(tmp_path, "| fold | kaleido |\n| fold_count | 8 |")
+    assert "float sector = TAU / 8.0;" in text
+    assert "a = abs(a);" in text
+    assert "p = fold_space(p);" in text
+
+
+def test_mirror_fold_is_generated(tmp_path):
+    """A mirror fold reflects space across two planes."""
+    text = _folded_scene(tmp_path, "| fold | mirror |")
+    assert "p.x = abs(p.x);" in text
+    assert "p.z = abs(p.z);" in text
+
+
+def test_effect_passes_are_placebo_hooks():
+    """Every effect is a complete pass over the previous one."""
+    clock = Clock(bpm=120.0, bars=8, fps=30, width=960, height=540)
+    for name in ("bloom", "chroma", "crt", "glitch"):
+        text = assemble_effect(name, {}, clock)
+        assert text.startswith("//!HOOK MAIN")
+        assert f"//!DESC effect: {name}" in text
+        assert "vec4 hook()" in text
+    assert "HOOKED_texOff" in assemble_effect("bloom", {}, clock)
+    assert "HOOKED_tex(" in assemble_effect("chroma", {}, clock)
+    assert "hash11" in assemble_effect("glitch", {}, clock)
+
+
+def test_effect_parameters_are_numeric_literals():
+    """Effect knobs are validated and baked in."""
+    clock = Clock(bpm=120.0, bars=8, fps=30, width=960, height=540)
+    text = assemble_effect(
+        "bloom", {"threshold": "0.2", "strength": "1.5", "radius": "4"}, clock
+    )
+    assert "smoothstep(0.2, 1.0, lum)" in text
+    assert "* 1.5" in text
+    assert "* 4.0" in text

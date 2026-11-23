@@ -10,6 +10,10 @@ shades every frame with it; ffmpeg only encodes the frames.
 There is no scene graph editor and no keyframe timeline. There is a clock, a text
 file, and a shader you can read.
 
+**New here?** Read [TUTORIAL.md](TUTORIAL.md) - it explains SDFs, VapourSynth and
+the whole Markdown format from first principles. The formal contract is in
+[SPEC.md](SPEC.md).
+
 ---
 
 ## Requirements
@@ -148,7 +152,7 @@ size: 960x540
   colour.
 - **Sections** rows are bar ranges and must cover `0..bars` with no gap.
 
-The Stage table also carries the screen-space pass:
+The Stage table also carries the screen-space pass and the space fold:
 
 | key | meaning | default |
 |-----|---------|---------|
@@ -157,6 +161,33 @@ The Stage table also carries the screen-space pass:
 | `grain` | per-pixel noise | `0.012` |
 | `vignette` | radial darkening | `0.22` |
 | `hue` | rotate every material colour around grey (colour cycling) | `0` |
+| `fold` | repeat space before every field: `none`, `mirror`, `kaleido` | `none` |
+| `fold_count` | sectors for `fold: kaleido` | `6` |
+
+### Effect passes
+
+`## Effects` adds post passes. Each one is a generated libplacebo shader over the
+previous pass, so nothing leaves GLSL and nothing is re-marched.
+
+```markdown
+## Effects
+| effect | key       | value |
+|--------|-----------|-------|
+| bloom  | strength  | 0.7   |
+| chroma | amount    | 0.05  |
+| crt    | curvature | 0.12  |
+| glitch | chance    | 0.05  |
+```
+
+| effect | knobs (default) | what it does |
+|--------|-----------------|--------------|
+| `bloom` | `threshold` 0.55, `strength` 0.8, `radius` 2.0 | bright-pass blur added back |
+| `chroma` | `amount` 0.05 | radial red/blue split |
+| `crt` | `curvature` 0.12 | barrel curvature, black outside |
+| `glitch` | `amount` 0.06, `rate` 9.0, `chance` 0.08 | band-wise horizontal offsets |
+
+Order is first appearance in the table. Every pass is seekable because `TIME0` is
+injected into each one.
 
 ### Composition cells
 
@@ -234,6 +265,19 @@ The shipped library already covers the useful demo pieces:
 | `pillars.glsl` | a ring of `count` columns | polar repetition, no column at the centre |
 | `plane_wave.glsl` | wavy plane; with `amp=0` a flat floor | pair with `pattern=checker` or `grid` |
 | `sphere.glsl` | sphere | pair with `pattern=stripes` for a synthwave sun |
+| `cylinder.glsl` | capped cylinder along Y | exact |
+| `cone.glsl` | capped cone, `r1` to `r2` | exact |
+| `hexprism.glsl` | hexagonal prism along Z | exact |
+| `helix.glsl` | helical tube | approximate; `shrink` < 1 |
+| `terrain.glsl` | noise ground plane (`fbm`) | approximate; `shrink` < 1 |
+| `mandelbulb.glsl` | mandelbulb distance estimate | expensive: six iterations per sample |
+| `box.glsl` | rounded box | exact |
+| `capsule.glsl` | capsule between two points | exact |
+| `torus.glsl` | torus, spin and tilt | exact |
+
+The prelude also provides `vnoise`, `fbm`, `hash13`, `smin`, `smax`, `rot2`/`rotX`/
+`rotY`/`rotZ`, `apply_pattern` and `hue_rotate`, so a new template can be a few
+lines long.
 
 `shows/demo` uses all of them across four bar-clocked scenes. The screen pass adds
 scanlines, plasma, hue cycling and grain, so the CRT feel comes from the Stage
@@ -246,6 +290,7 @@ table, not from ffmpeg.
 | `compile --show S` | Markdown -> shader | `gen/S/scene.glsl`, `gen/S/score.json` |
 | `frame --show S [--at SEC] [--out PNG]` | one still | `output/S/frame_NNNNN.png` |
 | `render --show S [--from SEC] [--to SEC] [--out MP4]` | encode the show | `output/S/show.mp4` |
+| `clips --show S [--seconds N] [--lead SEC]` | one short clip per section | `output/S/clips/scene_NN_bars_A-B.mp4` |
 | `shows` | list the shows | |
 
 `--out` accepts a path. `--from` and `--to` are half-open: `--to 5` ends at frame
@@ -264,6 +309,20 @@ table, not from ffmpeg.
   driver a render is stable; across machines, compare with a tolerance.
 - Noise is seeded from the frame index and the pixel position, not from
   uninitialised state.
+- Effect passes are shaders too, so a chain of passes stays reproducible; `TIME0`
+  is injected into every pass.
+
+## Checks
+
+```powershell
+.venv\Scripts\python -m pytest -q        # 48 unit tests, no GPU needed
+.venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
+```
+
+`gpu_parity.py` renders the real generated GLSL of `shows/ring` on 256 sample points
+at 16-bit precision and compares each decoded distance against an independent
+analytic torus. It currently reports a maximum absolute error of 0.0076 against a
+tolerance of 0.01. Exit code 0 means the generated shader matches the mathematics.
 
 ## Troubleshooting
 
@@ -277,6 +336,9 @@ table, not from ffmpeg.
 | the ring/square is missing | check the `Sections` cell; a visual is only present when its row is active |
 | a frame is empty background | the camera starts inside a solid (a floor, a column); raise the camera or move the geometry |
 | `another sdfshow build is running` | wait, or delete the stale lock file |
+| an effect pass has no visible change | check the `## Effects` table: rows merge per effect, and order is first appearance |
+| the whole frame is black with `crt` | `curvature` is pushing the corners off-screen; lower it |
+| a kaleido fold hides the scene | the fold repeats the field, so raise `distance` or move `target` |
 
 ## Project layout
 
@@ -285,11 +347,14 @@ sdfshow/        the Python package (parser, clock, codegen, renderer, CLI)
 fields/         GLSL SDF template library
 shows/first/    the worked example (8 bars, 120 BPM)
 shows/demo/     the demoscene set (tunnel, Menger, gyroid, sun and columns)
+shows/ops/      subtract and intersect operators, plus a span=2 steps track
+shows/post/     a one-bar probe of the effect chain
 shows/ring/     a one-field probe
-tests/          pytest suite (clock, markdown, tracks, fields, arrangement)
+tests/          pytest suite + tests/gpu_parity.py (manual GPU check)
 gen/            generated shaders and scores (gitignored)
 output/         renders, stills and logs (gitignored)
 SPEC.md         the SRS: architecture, control surfaces, acceptance checks
+TUTORIAL.md     the long-form guide: SDF, VapourSynth, Markdown, walkthroughs
 TODO.md         open work
 ```
 

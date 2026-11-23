@@ -35,3 +35,19 @@ def test_time_offset_zero_for_a_full_render(tmp_path, monkeypatch):
     show = _show(tmp_path, monkeypatch)
     script = write_script(show, script=tmp_path / "s.vpy")
     assert "#define TIME0 0" in script.read_text(encoding="utf-8")
+
+
+def test_effect_passes_are_chained(tmp_path, monkeypatch):
+    """Each effect adds one more Shader call over the previous clip."""
+    show = _show(tmp_path, monkeypatch)
+    show.effects = ["bloom", "chroma"]
+    for index, name in enumerate(show.effects, start=1):
+        (show.gen / f"fx_{index}_{name}.glsl").write_text(
+            "//!HOOK MAIN\n", encoding="utf-8"
+        )
+    script = write_script(show, script=tmp_path / "s.vpy")
+    text = script.read_text(encoding="utf-8")
+    assert "PASSES = [" in text
+    assert text.count("fx_") == 2
+    assert "for path in PASSES:" in text
+    assert text.count("#define TIME0 0") == 1

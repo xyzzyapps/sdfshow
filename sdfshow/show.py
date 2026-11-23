@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import config as C
 from .clock import Clock
-from .md import kv_table, rows, scalars
+from .md import kv_table, rows, scalars, table_after
 
 _CELL = re.compile(r"^(?P<op>[usix])(?P<k>[0-9]*\.?[0-9]+)?$")
 _RANGE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
@@ -95,6 +95,8 @@ class Show:
     fields_order: list[str] = field(default_factory=list)
     sections: list[Section] = field(default_factory=list)
     materials: dict[str, Material] = field(default_factory=dict)
+    effects: list[str] = field(default_factory=list)
+    effect_params: dict[str, dict[str, str]] = field(default_factory=dict)
     audio: str = ""
 
     @property
@@ -242,6 +244,22 @@ def parse(name: str, path: Path) -> Show:
                     ) from exc
             show.materials[row[0]] = Material(color, pattern, scale)  # type: ignore[arg-type]
 
+    for name, effect_params in _effects(text).items():
+        show.effects.append(name)
+        show.effect_params[name] = effect_params
+
+    fold = show.stage_value("fold").strip().lower()
+    if fold not in ("none", "mirror", "kaleido"):
+        raise SystemExit(
+            f"show.md: stage 'fold' must be none/mirror/kaleido (got '{fold}')"
+        )
+    try:
+        count = float(show.stage_value("fold_count"))
+    except ValueError as exc:
+        raise SystemExit("show.md: stage 'fold_count' must be a number") from exc
+    if count < 2:
+        raise SystemExit("show.md: stage 'fold_count' must be at least 2")
+
     if not show.sections:
         # No arrangement: every field is unioned for the whole show.
         show.sections = [Section(0, clock.bars, {name: Cell("u") for name in order})]
@@ -266,6 +284,33 @@ def _material_tables(text: str):
     found = table_after(text, "Materials")
     if found is not None:
         yield found
+
+
+def _effects(text: str) -> dict[str, dict[str, str]]:
+    """Ordered ``{effect: {key: value}}`` from the ``## Effects`` table.
+
+    The first appearance of an effect sets its position in the pass chain. A row
+    with an empty key still registers the effect.
+    """
+    found = table_after(text, "Effects")
+    out: dict[str, dict[str, str]] = {}
+    if found is None:
+        return out
+    _header, body = found
+    for row in body:
+        if not row or not row[0]:
+            continue
+        name = row[0].strip().lower()
+        if name not in C.EFFECTS:
+            raise SystemExit(
+                f"show.md: unknown effect '{name}' (use {'/'.join(C.EFFECTS)})"
+            )
+        params = out.setdefault(name, {})
+        key = row[1].strip() if len(row) > 1 else ""
+        value = row[2].strip() if len(row) > 2 else ""
+        if key:
+            params[key] = value
+    return out
 
 
 def _check(show: Show) -> None:

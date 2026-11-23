@@ -33,7 +33,12 @@ STAGE_DEFAULTS: dict[str, str] = {
     "grain": "0.012",
     "vignette": "0.22",
     "hue": "0",
+    "fold": "none",
+    "fold_count": "6",
 }
+
+# Allowed `## Effects` pass names, in no particular order.
+EFFECTS: tuple[str, ...] = ("bloom", "chroma", "crt", "glitch")
 
 # Raymarch and shading effort. Deliberately fixed for now (not a per-show knob) so
 # the generated shader stays comparable between builds.

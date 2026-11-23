@@ -20,6 +20,11 @@ tasks:
     cmds:
       - '{{.PY}} -m pytest -q'
 
+  parity:
+    desc: GPU check of a generated field against a Python reference
+    cmds:
+      - '{{.PY}} tests/gpu_parity.py'
+
   compile:
     desc: 'generate gen/<show>/scene.glsl (show=first)'
     cmds:

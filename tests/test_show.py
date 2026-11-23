@@ -93,6 +93,51 @@ def test_materials(tmp_path):
     assert material.scale == 2.5
 
 
+def test_effects_keep_table_order_and_params(tmp_path):
+    """Effects run in first-appearance order; rows merge into one parameter set."""
+    text = BASE.replace("{rows}", "| 0-4 | u | u |") + (
+        "\n## Effects\n\n| effect | key | value |\n|---|---|---|\n"
+        "| bloom | strength | 0.7 |\n"
+        "| chroma | amount | 0.02 |\n"
+        "| bloom | radius | 3 |\n"
+    )
+    path = tmp_path / "show.md"
+    path.write_text(text, encoding="utf-8")
+    show = parse("test", path)
+    assert show.effects == ["bloom", "chroma"]
+    assert show.effect_params["bloom"] == {"strength": "0.7", "radius": "3"}
+
+
+def test_unknown_effect_raises(tmp_path):
+    """A typo in the effect chain fails by name."""
+    text = BASE.replace("{rows}", "| 0-4 | u | u |") + (
+        "\n## Effects\n\n| effect | key | value |\n|---|---|---|\n"
+        "| blooom | strength | 1 |\n"
+    )
+    path = tmp_path / "show.md"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(SystemExit, match="unknown effect 'blooom'"):
+        parse("test", path)
+
+
+def test_fold_defaults_and_validation(tmp_path):
+    """fold is none by default and rejects unknown modes."""
+    text = BASE.replace("{rows}", "| 0-4 | u | u |") + (
+        "\n## Stage\n\n| key | value |\n|---|---|\n| fold | kaleido |\n"
+        "| fold_count | 8 |\n"
+    )
+    path = tmp_path / "show.md"
+    path.write_text(text, encoding="utf-8")
+    show = parse("test", path)
+    assert show.stage_value("fold") == "kaleido"
+    assert show.stage_value("fold_count") == "8"
+
+    bad = text.replace("kaleido", "spiral")
+    path.write_text(bad, encoding="utf-8")
+    with pytest.raises(SystemExit, match="fold"):
+        parse("test", path)
+
+
 def test_bad_material_pattern_raises(tmp_path):
     """An unknown surface pattern fails loudly."""
     text = BASE.replace("{rows}", "| 0-4 | u | u |") + (

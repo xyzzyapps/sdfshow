@@ -27,8 +27,11 @@ Out of scope for 0.1.0:
 - a GUI, a real-time preview, mesh export, or PBR/pathtracing;
 - arbitrary GLSL supplied by the user outside `fields/` (templates are function
   bodies, by design);
-- multi-pass shaders and image-based effects (bloom, feedback, chromatic
-  aberration); a single-pass screen-space `post()` exists.
+- shadow/reflection/refraction passes and path tracing;
+- image-based post effects that need a temporal history (feedback, motion trails).
+
+In scope for post-processing: a chain of generated pass shaders selected by a show's
+`## Effects` table.
 
 ---
 
@@ -46,6 +49,10 @@ Out of scope for 0.1.0:
 - **Hook** - a libplacebo GLSL fragment stage, declared with `//!HOOK MAIN`.
 - **Frame counter** - the `frame` value libplacebo supplies to a hook; it counts
   output frames from zero for each render session, not source frame indices.
+- **Pass** - one libplacebo hook over the clip. Pass 0 is `scene.glsl`; each effect
+  adds one more.
+- **Fold** - `fold_space(p)`, a whole-scene repetition applied before every field.
+- **Effect** - a generated post pass (`bloom`, `chroma`, `crt`, `glitch`).
 
 ---
 
@@ -115,13 +122,13 @@ Module responsibilities:
 | `config.py` | paths, stage defaults, encode constants, `unique_path` |
 | `md.py` | one Markdown reader: scalars, tables, escaped pipes, `key/value` tables |
 | `clock.py` | the clock and its tokens |
-| `show.py` | `show.md` parsing, cells, sections, materials, validation |
+| `show.py` | `show.md` parsing, cells, sections, materials, effects, folds, validation |
 | `tracks.py` | track parsing, parameter-expression validation, track GLSL |
 | `fields.py` | `fields.md` parsing, template preprocessing and substitution, field GLSL |
-| `glsl.py` | whole-shader assembly: prelude, scene, materials, camera, shading, hook |
-| `render.py` | compile, VapourSynth script generation, vspipe/ffmpeg orchestration |
+| `glsl.py` | shader assembly: prelude, scene, materials, camera, shading, hook, effect passes |
+| `render.py` | compile, pass chain, VapourSynth script generation, vspipe/ffmpeg |
 | `proc.py` | exclusive build lock, quiet subprocess execution |
-| `cli.py` | argument parsing and command dispatch |
+| `cli.py` | argument parsing and command dispatch (`compile`, `frame`, `render`, `clips`) |
 
 ---
 
@@ -151,6 +158,12 @@ arithmetic over tracks and `t`.
 | `grain` | screen pass: per-pixel noise | `0.012` |
 | `vignette` | screen pass: radial darkening | `0.22` |
 | `hue` | rotate every material colour around grey | `0` |
+| `fold` | space fold before every field: `none`, `mirror`, `kaleido` | `none` |
+| `fold_count` | sectors for `fold: kaleido` (>= 2) | `6` |
+
+`fold` is implemented as `vec3 fold_space(vec3 p)`, called by `map_scene` and by the
+material pass. `mirror` takes `abs` on x and z; `kaleido` folds the XZ angle into one
+sector of `TAU/fold_count` and reflects it. An unknown mode fails at parse time.
 
 Camera basis:
 
@@ -195,6 +208,26 @@ documentation table cannot be mistaken for data.
 
 Cells: `u`, `u<k>`, `s<k>`, `i<k>`, `x`. A blank cell is `x`. `0` is accepted as
 `x` for readability.
+
+### 5.5 Effects
+
+An optional `## Effects` table (`| effect | key | value |`). Each distinct effect
+name becomes one post pass, in **first-appearance order**; rows for the same effect
+merge into one parameter set. A row with an empty `key` registers the effect with its
+defaults.
+
+| effect | parameters (defaults) |
+|--------|-----------------------|
+| `bloom` | `threshold` 0.55, `strength` 0.8, `radius` 2.0 |
+| `chroma` | `amount` 0.05 |
+| `crt` | `curvature` 0.12 |
+| `glitch` | `amount` 0.06, `rate` 9.0, `chance` 0.08 |
+
+Generated per pass: `gen/<show>/fx_<n>_<name>.glsl`, a complete `//!HOOK MAIN`
+shader that samples the previous pass through `HOOKED_tex`. Each carries the
+`// @TIME0@` sentinel, so animated effects stay seekable. All parameters are
+validated as numbers; an unknown effect name or a non-numeric value fails at parse
+time.
 
 ---
 
@@ -292,7 +325,21 @@ as `else`. Time is uniform across the frame, so this branch is coherent.
 
 The material pass (`mat_id`) re-evaluates only the **union** fields at the hit point
 and returns the index of the nearest one. This doubles the field cost at the hit
-point only, not during marching.
+point only, not during marching. It receives the folded point
+(`fold_space(p)`), so a folded scene keeps consistent material boundaries.
+
+### 8.1 Space folds
+
+`fold_space(p)` is called at the top of `map_scene` and in the material pass:
+
+```
+none      p
+mirror    (abs(p.x), p.y, abs(p.z))
+kaleido   angle folded into TAU/fold_count, reflected, radius preserved
+```
+
+A fold is geometry-agnostic: it multiplies every field, so it must be applied in
+both passes or the material ids would disagree with the distance.
 
 ---
 
@@ -303,9 +350,10 @@ Structure, in order:
 1. `//!HOOK MAIN`, `//!BIND HOOKED`, `//!DESC <show>`, and the `// @TIME0@` sentinel.
 2. Defines: `FPS`, `BAR`, `BEAT`, `STEP`, `DUR`, `FRAMES`, `PI`, `TAU`, and
    `TIME0` (0 unless the render starts later).
-3. Helpers: `smin`, `smax`, hashes, rotations, `apply_pattern`, `hue_rotate`.
+3. Helpers: `smin`, `smax`, hashes, rotations, `apply_pattern`, `hue_rotate`,
+   `hash13`, `vnoise`, `fbm`, and the generated `fold_space`.
 4. Generated track functions and field functions.
-5. `map_scene`, `mat_id`, `mat_color`.
+5. `map_scene` (which begins with `p = fold_space(p)`), `mat_id`, `mat_color`.
 6. `camera_target`, `camera_position`, `camera_ray`.
 7. `calc_normal` (tetrahedron), `calc_ao`, `soft_shadow`, `post`, `render`.
 8. `hook()`.
@@ -339,21 +387,33 @@ Hard-coded effort constants live in `config.py`: `MARCH_STEPS=160`, `AO_STEPS=5`
 
 ## 10. Renderer
 
-`render.py` generates a VapourSynth script:
+`render.py` generates a VapourSynth script that chains every pass:
 
-```
+```python
+PASSES = [scene, fx_1_bloom, fx_2_chroma, ...]
+
+def shade(clip, path):
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read().replace("// @TIME0@", "#define TIME0 {offset}")
+    return core.placebo.Shader(clip, shader_s=src, width=W, height=H,
+                              sigmoidize=False, linearize=False, matrix=5)
+
 clip = core.std.BlankClip(W, H, format=vs.YUV444P16, length=NF, fpsnum=FPS)
-clip = core.placebo.Shader(clip, shader_s=..., width=W, height=H,
-                           sigmoidize=False, linearize=False, matrix=5)
+for path in PASSES:
+    clip = shade(clip, path)
 clip = core.resize.Bicubic(clip, format=vs.YUV420P8, matrix_in_s="470bg",
                            matrix_s="470bg", range_in_s="limited", range_s="limited")
 ```
 
-`vs-placebo` requires `YUVxxxP16` input; the blank clip is only a frame carrier,
-because the shader ignores `HOOKED_tex` entirely.
+Pass 0 is `scene.glsl`; each effect adds one call over the previous clip. Nothing is
+converted between passes: the chain stays `YUV444P16` until the final resize.
 
-The script rewrites the `// @TIME0@` sentinel with the render's first frame. The
-shader source itself stays identical across renders.
+`vs-placebo` requires `YUVxxxP16` input; the blank clip is only a frame carrier,
+because the scene shader ignores `HOOKED_tex` entirely (effect passes read it).
+
+The script rewrites the `// @TIME0@` sentinel in **every** pass with the render's
+first frame, so the scene clock and animated effects agree. The shader sources stay
+identical across renders.
 
 Encoding:
 
@@ -381,8 +441,12 @@ Ranges are half-open: `--from A --to B` encodes frames
 ## 11. Outputs, versioning, locking
 
 - `gen/<show>/scene.glsl` is generated; `fields/` is the source of truth.
-- `gen/<show>/score.json` records the resolved clock, sections and cells for audits.
-- `output/<show>/show.mp4`, `frame_NNNNN.png`; if a target exists, `_v2`, `_v3`, ...
+- `gen/<show>/fx_<n>_<name>.glsl` - one file per effect pass, in order.
+- `gen/<show>/score.json` records the resolved clock, effects, sections and cells for
+  audits.
+- `gen/<show>/render.vpy` and `still.vpy` - the generated VapourSynth scripts.
+- `output/<show>/show.mp4`, `frame_NNNNN.png`, `clips/scene_NN_bars_A-B.mp4`; if a
+  target exists, `_v2`, `_v3`, ...
 - `output/<show>/logs/{vspipe,ffmpeg}.log` capture stderr.
 - `output/<show>/logs/.build.lock` (created with `O_EXCL`) prevents concurrent
   builds of the same show.
@@ -404,7 +468,17 @@ Automated (`pytest`):
 - material colour, pattern and scale parsing, and an unknown pattern failing;
 - the demo show assembling all six fields into one balanced shader;
 - the pattern array, `post()` pass and scanline constant reaching the generated
-  source.
+  source;
+- effect parsing: first-appearance order, parameter merging, unknown effect failing;
+- fold parsing and generated `fold_space` for `mirror` and `kaleido`;
+- every effect pass being a valid `//!HOOK MAIN` shader with its knobs baked in;
+- the generated script chaining passes over `YUV444P16` with one `TIME0`.
+
+Manual / GPU (`tests/gpu_parity.py`, run via `task parity`):
+
+- the generated torus body of `shows/ring` is evaluated on 256 sample points at
+  16-bit precision and compared against an independent Python torus; the maximum
+  absolute error must stay under 0.01 (currently 0.0076).
 
 Manual / visual:
 
@@ -412,6 +486,9 @@ Manual / visual:
   wavy floor;
 - `python -m sdfshow frame --show demo --at 2` shows the ring tunnel;
 - `shows/ring` is the single-field probe;
+- `shows/ops` shows `s` and `i` (bars 1-2 subtract, 2-4 intersect) and a `span=2`
+  steps track;
+- `shows/post` shows all four effect passes at once;
 - a still rendered via `--at` must equal the corresponding frame of the full video
   when both are decoded to the same colour space (verified at 44 dB PSNR after
   H.264, i.e. compression-only difference);
@@ -457,6 +534,21 @@ Manual / visual:
 3. Decide whether it is legal as a first active cell.
 4. Add a test for the codegen.
 
+### Add an effect pass
+
+1. Add the name to `config.EFFECTS` and its defaults to `glsl._EFFECT_DEFAULTS`.
+2. Add a branch in `glsl.assemble_effect` returning the `hook()` body.
+3. Use `_effect_num(name, params, key)` for every knob, so values are validated.
+4. Add it to a show's `## Effects` table and check the generated
+   `gen/<show>/fx_<n>_<name>.glsl`.
+5. Test that the pass is a `//!HOOK MAIN` shader with its knobs baked in.
+
+### Add a fold
+
+1. Add the mode to the validation list in `show.parse`.
+2. Add a branch in `glsl._fold` returning a `vec3 fold_space(vec3 p)`.
+3. Remember the fold must remain valid in the material pass too.
+
 ---
 
 ## 14. Risks and limitations
@@ -471,6 +563,18 @@ Manual / visual:
   marcher take smaller steps.
 - **Template library size.** ffmpeg offers hundreds of ready filters; GLSL offers
   nothing. The library in `fields/` is the main authoring cost of the project.
+- **No reflections or refraction.** Shading is analytic: diffuse, specular, rim, AO,
+  soft shadow, fog. There is no ray bounce and no glass.
+- **Multi-pass is post only.** Effect passes read the finished picture; they cannot
+  change geometry, lighting or emission. Bloom glows on the rendered image, not on
+  emissive surfaces.
+- **Effect cost is linear in passes.** Each pass is a full-screen GPU dispatch. The
+  demo (bloom + chroma + glitch) went from about 21 fps to 13 fps of wall time.
+- **The fold is global.** `fold` applies to every field, so a folded object and an
+  unfolded floor cannot coexist in one show. Put the fold in a template for a local
+  one.
+- **Mandelbulb is expensive.** Six iterations multiply the per-sample cost inside a
+  160-step march.
 - **No audio yet.** `audio:` is parsed but not muxed. Audio-reactive control needs
   a data channel into the shader (a sampled envelope array baked into the shader, or
   the frame-strip idiom used by fftechno).
@@ -496,11 +600,14 @@ Manual / visual:
 | `fields/README.md` | yes | template-language guide |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/demo/{show,fields}.md` | yes | demoscene set (tunnel, Menger, gyroid, sun, columns) |
+| `shows/ops/{show,fields}.md` | yes | subtract/intersect operators, `span=2` steps |
+| `shows/post/{show,fields}.md` | yes | all four effect passes on one sphere |
 | `shows/ring/{show,fields}.md` | yes | one-field probe |
 | `tests/*.py` | yes | pytest suite |
+| `tests/gpu_parity.py` | yes | manual GPU check: generated field vs Python reference |
 | `gen/<show>/*` | no | generated shader + score |
 | `output/<show>/*` | no | renders, stills, logs |
-| `SPEC.md`, `README.md`, `TODO.md` | yes | documentation |
+| `SPEC.md`, `README.md`, `TUTORIAL.md`, `TODO.md` | yes | documentation |
 | `Taskfile.yml`, `pyproject.toml` | yes | tooling |
 
 ---
@@ -550,10 +657,24 @@ the colonnade uses polar repetition to keep the centre clear. The CRT look is a
 screen-space `post()` pass driven by the Stage table, so no ffmpeg filter is
 involved and the effect is reproducible frame by frame.
 
-**Heading-based table lookup.** `## Sections` and `## Materials` are located by
-their headings. Before this, a prose table in a show's introduction that happened
-to start with `bars` was parsed as an arrangement. Data tables and documentation
-tables now cannot collide.
+**Heading-based table lookup.** `## Sections`, `## Materials` and `## Effects` are
+located by their headings. Before this, a prose table in a show's introduction that
+happened to start with `bars` was parsed as an arrangement. Data tables and
+documentation tables now cannot collide.
+
+**Effect passes are generated GLSL, not VapourSynth filters.** VapourSynth offers
+`Expr`, `Convolution`, `AverageFrames`, `MaskedMerge`, `Deband` and more. Using them
+would mean a second effects language, a second set of colour-space rules, and a
+picture that is half shader and half filter graph. Instead each effect is another
+generated `//!HOOK MAIN` shader chained over the previous clip. The graph stays three
+filters wide (`BlankClip`, `Shader`, `resize`), every pass is inspectable in `gen/`,
+and `TIME0` is injected into all of them so the chain stays seekable. `Deband` and
+`AverageFrames` remain noted in `TODO.md` as optional, not adopted.
+
+**Fold as a stage key, not a template parameter.** `fold_space(p)` sits in front of
+every field, in both the distance and the material pass. That gives a whole-scene
+kaleidoscope for one line of Markdown. The cost is that a fold cannot be applied to
+one object only, which is documented as a limitation rather than hidden.
 
 **Prior art.** Shader Park (JS DSL -> GLSL SDF, headless converters), ISF (a JSON
 header declaring `audio`/`audioFFT` inputs, i.e. the shader/host contract),

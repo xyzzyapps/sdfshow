@@ -80,6 +80,68 @@ vec3 hue_rotate(vec3 c, float a) {
 }
 """
 
+_NOISE = """\
+float hash13(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+float vnoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n000 = hash13(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+    float nx00 = mix(n000, n100, f.x);
+    float nx10 = mix(n010, n110, f.x);
+    float nx01 = mix(n001, n101, f.x);
+    float nx11 = mix(n011, n111, f.x);
+    return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
+}
+float fbm(vec3 p) {
+    float sum = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 4; i++) {
+        sum += amp * vnoise(p);
+        p = p * 2.03 + 11.7;
+        amp *= 0.5;
+    }
+    return sum;
+}
+"""
+
+
+def _fold(mode: str, count: float) -> str:
+    """Generate the space fold applied before every field."""
+    if mode == "none":
+        return "vec3 fold_space(vec3 p) { return p; }\n"
+    if mode == "mirror":
+        return (
+            "vec3 fold_space(vec3 p) {\n"
+            "    p.x = abs(p.x);\n"
+            "    p.z = abs(p.z);\n"
+            "    return p;\n"
+            "}\n"
+        )
+    return (
+        "vec3 fold_space(vec3 p) {\n"
+        "    float a = atan(p.z, p.x);\n"
+        "    float r = length(p.xz);\n"
+        f"    float sector = TAU / {num(count)};\n"
+        "    a = mod(a + 0.5 * sector, sector) - 0.5 * sector;\n"
+        "    a = abs(a);\n"
+        "    p.x = cos(a) * r;\n"
+        "    p.z = sin(a) * r;\n"
+        "    return p;\n"
+        "}\n"
+    )
+
 
 def _f(value: str, where: str) -> str:
     """A GLSL float literal from a stage value."""
@@ -228,6 +290,7 @@ vec3 camera_ray(vec2 uv, float t) {{
 
     scene = f"""\
 float map_scene(vec3 p, float t) {{
+    p = fold_space(p);
     float d = 1e9;
 {_section_chain(show, fields)}
     return d;
@@ -312,7 +375,8 @@ vec3 render(vec2 uv, float t) {{
     vec3 col = bg;
     if (hit > 0.5) {{
         vec3 p = ro + rd * travel;
-        vec3 base = mat_color(mat_id(p, t), p, t);
+        vec3 fp = fold_space(p);
+        vec3 base = mat_color(mat_id(fp, t), fp, t);
         vec3 n = calc_normal(p, t);
         float ao = calc_ao(p, n, t);
         vec3 l = normalize({light});
@@ -345,7 +409,9 @@ vec3 render(vec2 uv, float t) {{
 {_SMIN}
 {_HASH}
 {_PATTERN}
+{_NOISE}
 {_TRANSFORMS}
+{_fold(show.stage_value("fold").strip().lower(), float(show.stage_value("fold_count")))}
 
 {render_functions(fields)}
 
@@ -366,3 +432,105 @@ vec4 hook() {{
 }}
 """
     return hook
+
+
+_EFFECT_DEFAULTS: dict[str, dict[str, str]] = {
+    "bloom": {"threshold": "0.55", "strength": "0.8", "radius": "2.0"},
+    "chroma": {"amount": "0.05"},
+    "crt": {"curvature": "0.12"},
+    "glitch": {"amount": "0.06", "rate": "9.0", "chance": "0.08"},
+}
+
+
+def _effect_num(name: str, params: dict[str, str], key: str) -> str:
+    """One numeric effect parameter with its default applied."""
+    raw = params.get(key, _EFFECT_DEFAULTS[name][key])
+    try:
+        return num(float(raw))
+    except ValueError as exc:
+        raise SystemExit(
+            f"show.md: effect '{name}' parameter '{key}' must be a number"
+        ) from exc
+
+
+def assemble_effect(name: str, params: dict[str, str], clock) -> str:
+    """Build one libplacebo post-pass shader.
+
+    Effect passes read the previous pass through ``HOOKED_tex``; they never touch
+    the SDF. ``TIME0`` is injected into every pass so animated effects (glitch)
+    stay seekable.
+    """
+    if name == "bloom":
+        body = f"""\
+    vec4 c = HOOKED_tex(HOOKED_pos);
+    float lum = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 b = vec3(0.0);
+    float wsum = 0.0;
+    for (int y = -2; y <= 2; y++) {{
+        for (int x = -2; x <= 2; x++) {{
+            vec2 o = vec2(float(x), float(y)) * {_effect_num(name, params, "radius")};
+            float w = 1.0 / (1.0 + dot(o, o));
+            b += HOOKED_texOff(o).rgb * w;
+            wsum += w;
+        }}
+    }}
+    b /= wsum;
+    float k = smoothstep({_effect_num(name, params, "threshold")}, 1.0, lum);
+    return vec4(c.rgb + b * k * {_effect_num(name, params, "strength")}, 1.0);
+"""
+    elif name == "chroma":
+        body = f"""\
+    vec4 c = HOOKED_tex(HOOKED_pos);
+    vec2 d = HOOKED_pos - 0.5;
+    vec2 o = d * dot(d, d) * {_effect_num(name, params, "amount")};
+    vec3 col;
+    col.r = HOOKED_tex(HOOKED_pos + o).r;
+    col.g = c.g;
+    col.b = HOOKED_tex(HOOKED_pos - o).b;
+    return vec4(col, 1.0);
+"""
+    elif name == "crt":
+        body = f"""\
+    vec2 d = HOOKED_pos - 0.5;
+    float r2 = dot(d, d);
+    vec2 pos = 0.5 + d * (1.0 + {_effect_num(name, params, "curvature")} * r2);
+    if (pos.x < 0.0 || pos.x > 1.0 || pos.y < 0.0 || pos.y > 1.0) {{
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }}
+    return HOOKED_tex(pos);
+"""
+    elif name == "glitch":
+        body = f"""\
+    float t = (float(frame) + TIME0) / FPS;
+    float band = floor(HOOKED_pos.y * 28.0);
+    float tick = floor(t * {_effect_num(name, params, "rate")});
+    float n = hash11(band * 1.37 + tick * 7.1);
+    vec2 pos = HOOKED_pos;
+    if (n > 1.0 - {_effect_num(name, params, "chance")}) {{
+        pos.x += (hash11(band + tick * 3.3) - 0.5) * {_effect_num(name, params, "amount")};
+    }}
+    vec3 col;
+    col.r = HOOKED_tex(pos + vec2(0.0015, 0.0)).r;
+    col.g = HOOKED_tex(pos).g;
+    col.b = HOOKED_tex(pos - vec2(0.0015, 0.0)).b;
+    return vec4(col, 1.0);
+"""
+    else:
+        raise SystemExit(f"unknown effect '{name}'")
+
+    return f"""\
+//!HOOK MAIN
+//!BIND HOOKED
+//!DESC effect: {name}
+// @TIME0@
+
+#define FPS {num(float(clock.fps))}
+#ifndef TIME0
+#define TIME0 0.0
+#endif
+
+float hash11(float n) {{ return fract(sin(n * 127.1) * 43758.5453); }}
+
+vec4 hook() {{
+{body}}}
+"""
