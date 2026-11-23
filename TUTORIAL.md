@@ -1081,15 +1081,19 @@ only the Stage says so:
 | key           | value            |
 |---------------|------------------|
 | mode          | 2d               |
-| pixel         | 9                |
-| outline       | 0.007            |
-| outline_color | 0.08\|0.05\|0.09 |
+| pixel         | 1                |
+| outline       | 0.005            |
+| outline_color | 0.10\|0.06\|0.06 |
+| zoom          | zoom             |
+| focus_x       | focus_x          |
+| focus_y       | focus_y          |
 | font          | 0.020            |
 | panel         | 2.60             |
 ```
 
-There is no camera in this show, because there is no march. `compile` emits a
-`render_2d(uv, t)` instead of a raymarcher, and the frame is painted back-to-front:
+There is no march and no 3D camera, but there are still shots. `compile` emits a
+`render_2d(uv, t)` that scales the whole layer stack around a focus point, and the
+frame is painted back-to-front:
 
 ```
 col = background
@@ -1104,9 +1108,9 @@ Three things follow from that loop, and they are the whole of 2D authoring:
 
 1. **Table order is depth.** The first row in `Fields` is furthest back. A character
    behind a table is listed before the table; there is no per-pixel depth test.
-2. **A layer is one flat fill.** A face is five rows - head, hair, eyes, brows, mouth -
-   because a single row cannot carry shading or a second colour. A window is a pane
-   plus a frame for the same reason.
+2. **A layer is one flat fill.** A face is five rows - head, hair, white sclera,
+   pupils, mouth - because a single row cannot carry shading or a second colour. A
+   window is a pane plus a frame for the same reason.
 3. **A cell is visibility, not an operator.** `x` means the layer is absent; `u` and
    `u<k>` both mean "draw it". Two flat fills cannot be min/maxed, so `s` and `i` are
    meaningless here and `m<w>` becomes a fade gate at `w > 0.5`.
@@ -1117,25 +1121,52 @@ one `Fields` table; only the active section's rows are drawn:
 | bars  | setting | who |
 |-------|---------|-----|
 | 0-8   | the diner: blue wall, booth, table, cup | Aina and Boris in the booth; Dora standing |
-| 8-20  | the house: grey wall, sofa, rug, lamp, chair | Aina and Boris on the sofa; Dora and Ellis standing |
+| 8-20  | the house: beige wall, sofa, rug, lamp | Aina and Boris on the sofa; Dora and Ellis standing |
 
 That is the point of the show: a scene change is a section change, not a second
 show. The clock, the dialogue table and the render are shared.
 
-The four characters are distinguished by **silhouette**, which is what survives at a
-9-pixel grid: Aina narrow, Boris broad-shouldered, Dora long-haired, Ellis round and
-balding. Colour is a second cue, not the first.
+The four characters are distinguished by **silhouette**: Aina narrow with a bowl cut,
+Boris broad with a flat top, Dora long-haired, Ellis round and balding. Colour is a
+second cue, not the first, because a cutout has to read at a glance.
+
+The look is construction paper, not pixels. `pixel` is `1` (off); the shapes are big
+and simple, the heads are large relative to the bodies, and the eyes are white ovals
+with small dark pupils. An early version kept the 9-pixel quantise and dark eye
+shapes, which merged the eyes into the hair and turned the faces into masks.
+
+### Shots and mouths
+
+South Park's grammar is wide, close, close, wide. There is no camera, so the show gets
+it from three stage keys that a `cuts` track switches on bar boundaries:
+
+```markdown
+| zoom    | cuts | 0:1.0\|1:2.3\|3:1.0\|5:2.1 |
+| focus_x | cuts | 0:0.0\|1:-0.44\|3:0.0\|5:0.58 |
+```
+
+`zoom` magnifies around `focus_x`/`focus_y`; every layer is evaluated at
+`focus + uv/zoom`, and the returned distance is multiplied by the zoom so the outline
+keeps a constant width. `shows/pixel` cuts to whichever character is speaking.
+
+The mouth is one layer whose half-height is `0.020 + mouth * 0.10` in face units, with
+its top edge fixed and the bottom edge dropping - a jaw, not an inflating oval. The
+mouth tracks are windows over each speaker's own bar range. Getting those windows
+wrong is why an earlier version looked frozen: Aina's mouth moved during Boris's line,
+and neither moved during their own second lines.
 
 Dialogue comes from one table:
 
 ```markdown
 | speaker | bars | text                              | voice |
 |---------|------|-----------------------------------|-------|
-| AINA    | 1-2  | So we are just going to sit here? | slt   |
+| AINA    | 1-2  | We have been sitting here for an hour. | slt |
 ```
 
-`dialog.py` reads the speaker's `cx` from `fields.md` to decide left or right, so the
-bubble tail points at the right person even with four speakers. The text is
+`dialog.py` reads the speaker's `cx` from `fields.md` and applies the camera at that
+line's first bar, so the panel is centred over the head even in a close-up and the
+tail points at them. The tail is a wide, short triangle; an earlier version was a
+spike on the wrong side of the panel. The text is
 rasterised by `textmask.py` into a panel mask and an ink mask, and
 `render.py` composites them with `std.MaskedMerge` over the line's frame window. The
 shader never sees a glyph.
@@ -1154,9 +1185,9 @@ Render it:
 .venv\Scripts\python -m sdfshow render --show pixel
 ```
 
-The first still is the diner with two people; the second is the living room with the
-sofa and four. The render is 50 seconds, 1500 frames at 30 fps, with a synthesized
-voice line at each spoken bar range.
+The first still is a close-up on Aina mid-line, mouth open, tail on her head; the
+second is a wide shot of the living room. The render is 50 seconds, 1500 frames at
+30 fps, with a synthesized voice line at each spoken bar range.
 
 ## 15. Recipes
 

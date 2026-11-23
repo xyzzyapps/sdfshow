@@ -225,16 +225,16 @@ def emit_bubble_templates(show, gen_dir: Path, fields_dir: Path) -> list[str]:
     return written
 
 
-def _seats(show, width: int) -> dict[str, bool]:
-    """Map each speaker to left (True) or right (False), from their field's ``cx``.
+def _seats(show) -> dict[str, float]:
+    """Map each speaker to their field's screen-space ``cx``.
 
-    Reading the seat from the field means the bubble tail follows the character rather
-    than assuming two speakers in two fixed places, which matters once a scene has more
-    people in it.
+    Reading the seat from the field means the bubble is placed over the character who is
+    speaking, and the tail points at them, rather than assuming two speakers in two fixed
+    places. That matters as soon as a scene has more than two people in it.
     """
     import re
 
-    seats: dict[str, bool] = {}
+    seats: dict[str, float] = {}
     try:
         text = show.fields_md.read_text(encoding="utf-8")
     except OSError:
@@ -245,16 +245,57 @@ def _seats(show, width: int) -> dict[str, bool]:
         name, params = row[0], row[1]
         match = re.search(r"cx\s*=\s*(-?[\d.]+)", params)
         if match:
-            seats[name.upper()] = float(match.group(1)) < 0.0
+            seats[name.upper()] = float(match.group(1))
     return seats
+
+
+def _stage_tracks(show) -> dict:
+    """Every track the show can reference, from both Markdown files."""
+    from .md import tables
+    from .tracks import parse_tracks
+
+    tracks: dict = {}
+    for path in (show.show_md, show.fields_md):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        tracks.update(parse_tracks(text, tables(text)))
+    return tracks
+
+
+def _camera(show, tracks: dict, bar_index: float) -> tuple[float, float]:
+    """Zoom and focus x at *bar_index*, from `cuts` stage tracks or plain numbers.
+
+    The bubbles are drawn in screen space, so a close-up moves the speaker even though
+    their world `cx` has not changed. Reading the same camera track the shader uses is
+    what keeps the tail pointing at the head in every shot.
+    """
+
+    def value(key: str, fallback: float) -> float:
+        raw = (show.stage_value(key) or "").strip()
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        track = tracks.get(raw)
+        if track is None or track.kind != "cuts" or not track.keys:
+            return fallback
+        out = track.keys[0][1]
+        for at, number in track.keys:
+            if at <= bar_index:
+                out = number
+        return out
+
+    return value("zoom", 1.0), value("focus_x", 0.0)
 
 
 def overlay_plan(show, gen_dir: Path):
     """Build every bubble's masks and return the placements for the overlay pass.
 
-    Each line becomes one entry: its mask files, the pixel rectangle it occupies and
-    the bar window it is visible in. The generated VapourSynth script turns these into
-    ``std.BlankClip`` + ``std.Overlay`` steps, so text never touches the raymarch.
+    Each line becomes one entry: its mask files, the pixel rectangle it occupies and the
+    bar window it is visible in. The generated VapourSynth script turns these into
+    ``std.MaskedMerge`` steps, so text never touches the SDF passes.
     """
     import numpy as np
 
@@ -271,24 +312,39 @@ def overlay_plan(show, gen_dir: Path):
     plan = []
     font = float(show.stage_value("font") or 0.042)
     panel = float(show.stage_value("panel") or 1.0)
-    # A speaker's seat is where their field sits, so the tail points at the right person
-    # even with more than two of them. Falls back to alternating sides.
-    seats = _seats(show, width)
+    # A speaker's seat is where their field sits, so the panel is centred over their head
+    # and the tail points at them, even with four of them. Falls back to alternating
+    # sides for a speaker with no field.
+    seats = _seats(show)
+    tracks = _stage_tracks(show)
     for index, line in enumerate(lines):
         cap = max(8, round(height * font))
-        left_seat = seats.get(line.speaker, index % 2 == 0)
+        cx = seats.get(line.speaker, -0.35 if index % 2 == 0 else 0.35)
+        zoom, focus_x = _camera(show, tracks, line.lo)
+        head_x = width * 0.5 + (cx - focus_x) * zoom * height
+        # The panel's width depends on the text, not on the tail, so measure once, place
+        # the panel, then rebuild with a tail that points at the head.
         item = textmask.bubble(
             line.text,
             cap,
-            tail_right=not left_seat,
+            tail_right=True,
             max_width=width * 0.34,
             panel_scale=panel,
         )
         bw, bh = item.size
+        x = min(max(round(head_x - bw / 2.0), 4), width - bw - 4)
+        tip = (head_x - x) / bw
+        item = textmask.bubble(
+            line.text,
+            cap,
+            tail_right=tip > 0.5,
+            max_width=width * 0.34,
+            panel_scale=panel,
+            tip_frac=tip,
+        )
+        bw, bh = item.size
         # Seat the bubble above its speaker's head, inside the frame.
-        x = round(width * (0.10 if left_seat else 0.56))
-        y = round(height * 0.13)
-        x = min(x, width - bw - 4)
+        y = round(height * 0.07)
         np.save(masks / f"{index:02d}_panel.npy", item.panel)
         np.save(masks / f"{index:02d}_ink.npy", item.ink)
         plan.append(

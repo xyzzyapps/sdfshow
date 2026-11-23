@@ -23,8 +23,10 @@ PAD_X = 0.55
 PAD_Y = 0.42
 LINE_GAP = 0.34
 RADIUS = 0.30
-TAIL_W = 0.30
-TAIL_H = 0.62
+# A speech-bubble tail: a short, wide triangle. The first version was a narrow spike,
+# which read as a pen stroke rather than as an arrow pointing at a speaker.
+TAIL_W = 0.85
+TAIL_H = 0.60
 STROKE = 0.135
 
 
@@ -161,6 +163,7 @@ def bubble(
     max_width: float,
     max_lines: int = 3,
     panel_scale: float = 1.0,
+    tip_frac: float | None = None,
 ) -> Bubble:
     """A wrapped bubble: rounded panel, a tail, and the ink inside it.
 
@@ -168,6 +171,10 @@ def bubble(
     type. They are separate on purpose: shrinking the type must not shrink the bubble,
     because a smaller bubble is harder to read than smaller letters inside a comfortable
     one.
+
+    *tip_frac* places the tail's point as a fraction of the panel width, so the tail can
+    point at a speaker who is not centred under the panel. When it is omitted the tail
+    leans to its own side, which is the right default for a bubble in a corner.
     """
     lines, cap = fit(text, cap, max_width, max_lines)
     ink = text_mask(lines, cap)
@@ -189,10 +196,14 @@ def bubble(
         constant_values=1e9,
     )
 
-    # Tail: an isosceles triangle from the panel's bottom edge to a point below it,
-    # leaning towards its own character.
-    tip_x = w * (0.78 if tail_right else 0.22)
-    base_x = w * (0.58 if tail_right else 0.42)
+    # Tail: an isosceles triangle from the panel's bottom edge to a point below it. The
+    # base sits between the panel's centre and the tip, so the triangle leans without
+    # breaking away from the panel.
+    if tip_frac is None:
+        tip_x = w * (0.78 if tail_right else 0.22)
+    else:
+        tip_x = w * min(max(tip_frac, 0.10), 0.90)
+    base_x = tip_x + (w * 0.5 - tip_x) * 0.38
     ys, xs = np.mgrid[0:h, 0:w]
     span = np.clip((ys - body_h) / max(tail_h, 1), 0.0, 1.0)
     centre = base_x + (tip_x - base_x) * span

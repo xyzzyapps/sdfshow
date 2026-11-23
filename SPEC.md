@@ -22,7 +22,8 @@ In scope:
 - an order-dependent arrangement language for composing distance fields;
 - a raymarched renderer with normals, ambient occlusion, soft shadows and fog;
 - a flat 2D renderer that paints SDF layers back-to-front in screen space, with a
-  pixel-art quantise and per-layer outlines (`mode: 2d`);
+  screen-space camera (cuts to close-ups), optional pixel quantise and per-layer
+  outlines (`mode: 2d`);
 - speech bubbles drawn from a numpy SDF stroke font and composited as an overlay,
   with synthesized dialogue audio (`## Dialogue`);
 - deterministic, seekable frames; versioned outputs; a build lock.
@@ -198,6 +199,9 @@ ignored there because there is no march and no world space.
 | `pixel` | snap the sample to a grid of `pixel` device pixels; `1` disables it | `1` |
 | `outline` | rim width around every layer, screen units; `0` disables it | `0` |
 | `outline_color` | rim colour, `r\|g\|b` | `0.06\|0.05\|0.08` |
+| `zoom` | screen-space camera: `1` is wide, `> 1` is a close-up | `1` |
+| `focus_x` | scene x at the centre of the frame when zoomed | `0` |
+| `focus_y` | scene y at the centre of the frame when zoomed | `0` |
 | `font` | speech-bubble cap height as a fraction of frame height | `0.042` |
 | `panel` | bubble padding as a multiple of the type size | `1.0` |
 
@@ -479,13 +483,13 @@ A layer is one flat fill, which is the central constraint of this mode: a face c
 be drawn as one shape with painted features, because there is no shading and no
 texture. Faces are therefore **several layers** - head, hair, eyes, brows, mouth -
 each with its own colour and its own row in the table. The same applies to furniture
-(a window is a pane plus a frame). This is also how a pixel-art face is actually
-drawn, and it is why the result reads at a coarse grid.
+(a window is a pane plus a frame). It is also how a cutout face is actually drawn:
+white sclera, dark pupils, a dark mouth, each a shape rather than a shade.
 
-Because each layer is a single distance evaluation, the whole frame can be quantised
-to a pixel grid without the cost of a march. `pixel` snaps the sample coordinate to a
-device grid before any layer is evaluated; `outline` rims every layer; both are stage
-values and may be tracks.
+Each layer is a single distance evaluation, so the picture costs one shape test per
+layer per pixel. `pixel` can snap the sample coordinate to a device grid before any
+layer is evaluated (the earlier pixel-art look); the shipped show leaves it at `1`.
+`outline` rims every layer. Both are stage values and may be tracks.
 
 ### 10.2 Generated 2D shader
 
@@ -495,7 +499,23 @@ values and may be tracks.
 - one `if`/`else if` branch per section, keyed on `t < <hi * bar>`, so the section
   chain is a compile-time ladder over bar ranges;
 - inside each branch, one guarded paint block per field, in order, using the same
-  `_cell_gate` visibility rule as the rest of the build.
+  `_cell_gate` visibility rule as the rest of the build;
+- a screen-space camera applied before any layer is evaluated.
+
+The camera has no march to move, so a shot is a uniform scale of the same stack:
+
+```
+z     = max(zoom, 0.2)
+focus = (focus_x, focus_y)
+p2    = focus + uv / z
+```
+
+`p2` is the scene point sampled at output pixel `uv`, so `focus` sits at the centre
+of the frame and `z > 1` magnifies. Each layer returns a distance in pushed-in units,
+so the emitted code multiplies it by `z` before comparing with `outline`; the rim then
+keeps a constant width on screen at any zoom. `zoom`, `focus_x` and `focus_y` may be
+`cuts` tracks, which is how a show cuts wide -> close -> close -> wide on bar
+boundaries.
 
 The section chain opens one branch per section and closes once at the end. Emitting
 the close per block leaves the last branch dangling and the shader does not compile;
@@ -527,11 +547,14 @@ bug this replaced: it reserved the padding once at the bottom and then moved the
 `## Dialogue` drives bubbles and speech from one table. Each line names a speaker,
 a bar range, the text and a flite voice. `dialog.py`:
 
-1. resolves the speaker's side from their field's `cx` in `fields.md` (`cx < 0` is
-   the left seat), so the tail points at the right person even with four speakers;
-2. seats the bubble above the head, at a fixed fraction of the frame, clamped inside
-   the frame width;
-3. synthesizes the line with ffmpeg's `flite` filter and mixes it at its bar.
+1. reads the speaker's `cx` from `fields.md`, so the panel is centred over the person
+   who is talking, even with four of them;
+2. applies the same camera the shader uses at the line's first bar: the speaker's
+   screen x is `(cx - focus_x) * zoom`, so a close-up moves the panel with the head;
+3. points the tail at that screen x by passing it as a fraction of the panel width,
+   clamped away from the corners; the tail is a wide, short triangle, not a spike;
+4. seats the panel high in the frame, inside the frame width;
+5. synthesizes the line with ffmpeg's `flite` filter and mixes it at its bar.
 
 Lines longer than `MAX_CHARS` (48) fail at parse time, because a bubble that has to
 shrink below the font budget stops being readable.
@@ -548,7 +571,8 @@ raymarched 3D show.
 
 ### 10.4 What 2D mode does not do
 
-- No camera, normals, fog, shadows or `fold`; those keys are ignored.
+- No 3D camera: `zoom`/`focus_*` are a uniform scale, not perspective. Normals, fog,
+  shadows and `fold` are likewise ignored.
 - No smooth union (`u<k>` behaves as `u`), subtraction or intersection: a layer is
   either drawn or not.
 - No depth sorting within one section beyond table order; overlapping layers are
@@ -661,8 +685,8 @@ Automated (`pytest`):
 - 2D mode: `render_2d` is emitted instead of a march, layer order follows `Fields`,
   and a section cell of `x` removes the layer's paint block;
 - bubble masks: `wrap`/`fit` never exceed the line budget, `text_mask` places its
-  first baseline inside the canvas (the clipping regression), and `panel` scales the
-  padding independently of `font`.
+  first baseline inside the canvas (the clipping regression), `panel` scales the
+  padding without changing the ink, and a tail lands on the requested side.
 
 Manual / GPU (`tests/gpu_parity.py`, run via `task parity`):
 
@@ -684,6 +708,9 @@ Manual / visual:
   characters, i.e. the same show in two settings;
 - `python -m sdfshow frame --show diner --at 3` shows the raymarched booth, and a
   frame after a `cuts` key shows the camera has moved to another shot;
+- `shows/pixel` alternates a wide shot and a close-up on the speaker at every line
+  boundary; the mouth is visibly open mid-line and a closed line between lines, and
+  each tail points at the head of the character who is speaking;
 - the 50 s `shows/pixel` render has dialogue audio at every spoken bar range and no
   bubble clipped at the top of its panel;
 - a still rendered via `--at` must equal the corresponding frame of the full video
@@ -802,6 +829,9 @@ Manual / visual:
   anti-aliasing yet.
 - **2D mode has no depth.** Layer order is table order, so two shapes in the same
   section cannot interleave; a character behind a table must be listed behind it.
+- **The 2D camera has no parallax.** A close-up is a uniform scale, so the background
+  grows with the subject. That is the cutout look, not a perspective shot; a real
+  perspective would need per-layer depths.
 - **2D mode has no operators.** `u<k>`, `s<k>` and `i<k>` lose their meaning: a layer
   paints or it does not. Cross-fades (`m`) degrade to a visibility test at `w > 0.5`.
 - **A 2D face is many layers.** Head, hair, eyes, brows and mouth are five rows per
@@ -821,7 +851,7 @@ Manual / visual:
 | `sdfshow/*.py` | yes | the package |
 | `fields/*.glsl` | yes | template library (3D bodies and `*2d.glsl` flat layers) |
 | `fields/README.md` | yes | template-language guide |
-| `shows/pixel/{show,fields}.md` | yes | 2D pixel-art show: diner then living room, four characters, dialogue |
+| `shows/pixel/{show,fields}.md` | yes | 2D cutout show: diner then living room, four characters, close-ups, dialogue |
 | `shows/diner/{show,fields}.md` | yes | 3D animation: booth, two people, cut-track camera, dialogue |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |
@@ -929,13 +959,29 @@ and costs one distance evaluation per layer per pixel. The alternative - depth t
 between layers - would need a depth per layer, a second value out of every template,
 and a sort; it buys nothing a table order cannot express.
 
-**One fill per layer, therefore many layers per face.** A pixel-art face is
-`head + hair + eyes + brows + mouth`, five rows, five colours. That looks verbose
+**One fill per layer, therefore many layers per face.** A cutout face is
+`head + hair + sclera + pupils + mouth`, five rows, five colours. That looks verbose
 next to a 3D face, which is one field with shading, but it is the same trade the
 format makes everywhere: the picture is a table, and every entry is inspectable. The
 alternative - a template that returns a colour per pixel - would turn templates into
 mini-shaders and lose the single-return contract that makes them cheap to write and to
 test.
+
+**Close-ups are a zoom on the same stack, not a second scene.** A 2D show has no
+camera to move, but a sitcom is cut in shots. `zoom`/`focus_x`/`focus_y` scale and
+centre the whole layer stack, emitted as one line before any layer is evaluated, and a
+`cuts` track switches them on bar boundaries. The bubbles read the same track, so a
+tail still points at the speaker in a close-up. The cost is that a close-up has no
+parallax: the wall comes forward with the cast. Rejected alternative: per-layer depth
+and a real camera, which would double the data every template must return for a look
+this format does not need.
+
+**Cutout proportions are a template decision, not a parameter.** The first 2D heads
+read as boxes because the skull, the hair and the body were all roughly the same
+width, and the eyes were dark shapes that merged with the hair. The fix was to change
+the templates: a large oval skull, a narrow rounded body, white sclera with small
+pupils, and a hair cap cut above the eye line. No amount of per-show parameter tuning
+recovers a silhouette the template does not offer.
 
 **Text is a numpy mask, not shader work.** Evaluating a stroke font per pixel inside
 the shader is possible (an early version did it) and it forces the marcher to know

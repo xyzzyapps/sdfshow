@@ -230,6 +230,11 @@ def assemble_2d(show: Show, fields: Fields) -> str:
     outline = _motion(show, fields, "outline")
     outline_rgb = _vec3(show.stage_value("outline_color"), "outline_color")
     background = _vec3(show.stage_value("background"), "background")
+    # A 2D "camera": no march, but the whole stack can be pushed in around a focus
+    # point. Cuts between shots are a `cuts` track on these three keys.
+    zoom = _motion(show, fields, "zoom")
+    focus_x = _motion(show, fields, "focus_x")
+    focus_y = _motion(show, fields, "focus_y")
 
     # One paint block per section, each listing only the fields active in that range.
     # Back-to-front within a block, matching the Fields table read as a z-stack.
@@ -246,7 +251,7 @@ def assemble_2d(show: Show, fields: Fields) -> str:
             head = "} else {" if index else "{"
         body = "\n".join(
             f"    if ({_cell_gate(section.cells[name], index, show)}) {{\n"
-            f"        d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0);\n"
+            f"        d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0) * z;\n"
             f"        if (d < -o) {{ col = c[{i}]; }}\n"
             f"        else if (d < 0.0) {{ col = mix({outline_rgb}, c[{i}], "
             f"smoothstep(0.0, o, -d)); }}\n"
@@ -261,7 +266,14 @@ def assemble_2d(show: Show, fields: Fields) -> str:
     return f"""\
 vec3 render_2d(vec2 uv, float t) {{
     vec3 c[{len(colours)}] = vec3[{len(colours)}]({", ".join(colours)});
-    vec2 p2 = uv;
+    // Screen-space camera: `zoom` > 1 pushes in around the focus point. `uv` is the
+    // output pixel; the scene point sampled there is `focus + uv/zoom`, so the focus sits
+    // at the centre of the frame. Distances are measured in pushed-in space, so
+    // multiplying by the zoom brings them back to frame units and the outline keeps a
+    // constant width on screen at any zoom.
+    float z = max({zoom}, 0.2);
+    vec2 focus = vec2({focus_x}, {focus_y});
+    vec2 p2 = focus + uv / z;
     vec3 col = {background};
     float o = {outline};
     float d;

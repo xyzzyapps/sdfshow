@@ -41,6 +41,12 @@ STAGE_DEFAULTS: dict[str, str] = {
     "pixel": "1",
     "outline": "0",
     "outline_color": "0.06|0.05|0.08",
+    # 2D "camera": there is no 3D camera in this mode, but the picture can still be
+    # pushed in. `zoom` magnifies around `focus_x`/`focus_y` (screen units, y up), so a
+    # `cuts` track can alternate wide shots and close-ups on bar boundaries.
+    "zoom": "1",
+    "focus_x": "0",
+    "focus_y": "0",
     # Speech bubbles: `font` is the cap height as a fraction of frame height, `panel` pads
     # the bubble relative to the type. They are independent so smaller letters do not
     # force a smaller (harder to read) bubble.

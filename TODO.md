@@ -59,6 +59,17 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] `shows/diner`: the 3D animation (booth, two people, cut-track camera, dialogue)
 - [x] `shows/pixel`: two settings switched by `Sections`, four characters,
       12 dialogue lines, 50 s render with audio
+- [x] cutout restyle: `pixel` off, big heads on small bodies, white sclera with
+      pupils, a jaw that drops, simplified props (no pedestal foot, no lamp glow pool,
+      no chair), construction-paper palette
+- [x] 2D camera: `zoom`/`focus_x`/`focus_y` as `cuts` tracks, so the show cuts
+      wide -> close -> close -> wide on the speaker at bar boundaries
+- [x] bubbles: panel centred on the speaker's screen position (camera-aware), wide
+      tail whose tip lands on their head
+- [x] dialogue rewritten: dry, distinct voices, a running gag and a button
+- [x] mouth tracks corrected to each speaker's own bar windows (they were one line out)
+- [x] `tests/test_textmask.py`: no clipping, wrap/fit budget, panel padding vs type,
+      tail side
 - [x] deleted `shows/bar`: the abandoned first dialogue scene, superseded by
       `shows/diner`; `tools/bubble_probe.py` now reads `shows/diner`
 

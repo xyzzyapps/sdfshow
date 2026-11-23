@@ -1,13 +1,12 @@
-// A single 2D face feature on its own layer: eyes, brows or mouth.
+// One 2D face feature on its own layer: eyes, brows, mouth or pupils.
 //
-// Features are separate fields rather than part of the head, because in 2D mode each
-// layer paints one flat colour - that is what gives the cutout look, and it is also how
-// a pixel-art face is drawn (dark shapes on a light head, not shading).
+// A layer paints one flat colour, so a face is stacked: white sclera, dark pupils, a dark
+// mouth. That is the cutout look - not shading, just shapes.
 //
-// One template serves all three kinds. Every parameter it can touch is bound at the top
-// because a kind that ignores a value still has to resolve it; and `kind` is compared as
-// a float, since parameter substitution always emits a float literal (`0.0`, not `0`).
-// `kind` 0 eyes, 1 brows, 2 mouth.
+// One template serves every kind. Every parameter is bound at the top because a kind that
+// ignores a value still has to resolve it; `kind` is compared as a float, since parameter
+// substitution always emits a float literal (`0.0`, not `0`).
+// `kind` 0 sclera, 1 brows, 2 mouth, 3 pupils.
 vec2 q = (p.xy - vec2({{cx}}, {{cy}})) / {{s}};
 float kind = {{kind}};
 
@@ -19,7 +18,9 @@ float by = {{brow_y}};
 float bwide = {{bw}};
 float my = {{mouth_y}};
 float lift = {{brow}} * 0.05;
-float open = 0.010 + {{mouth}} * 0.05;
+// The mouth opens downward from a hinge at its top edge, so a talking character reads as
+// a jaw dropping rather than a shape inflating around its centre.
+float open = 0.020 + {{mouth}} * 0.10;
 
 if (kind < 0.5) {
     float eyes = min(
@@ -35,5 +36,13 @@ if (kind < 1.5) {
     );
     return brows * {{s}};
 }
-float mouth_s = length((q - vec2(0.0, my)) / vec2(bwide, open)) - 1.0;
-return mouth_s * {{s}};
+if (kind < 2.5) {
+    // Top edge fixed at `my`, bottom edge at `my - 2*open`: the jaw drops.
+    return (length((q - vec2(0.0, my - open)) / vec2(bwide, open)) - 1.0) * {{s}};
+}
+// Pupils: small dark discs inside each sclera, both looking slightly inward.
+float pupils = min(
+    length((q - vec2(-gap + 0.012, ey - etall * 0.05)) / vec2(ewide * 0.40, etall * 0.42)) - 1.0,
+    length((q - vec2(gap - 0.012, ey - etall * 0.05)) / vec2(ewide * 0.40, etall * 0.42)) - 1.0
+);
+return pupils * {{s}};

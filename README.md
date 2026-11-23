@@ -8,7 +8,7 @@ animation tracks. `compile` turns them into a single GLSL shader. VapourSynth sh
 every frame with it; ffmpeg only encodes the frames.
 
 There are two renderers behind the same Markdown: a raymarched 3D scene, and a flat
-2D pixel-art scene where the `Fields` table is a z-stack of shapes (`mode: 2d`).
+flat 2D cutout scene where the `Fields` table is a z-stack of shapes (`mode: 2d`).
 Speech bubbles are drawn from an SDF stroke font and composited by VapourSynth, with
 optional synthesized dialogue.
 
@@ -53,8 +53,8 @@ and a column hall). `shows/reel` is the long one: 30 seconds, five scenes, morph
 an animated kaleido fold and a shifting effect chain.
 
 The two animations are `shows/diner` (3D, the first one: two people in a booth and a
-cut-track camera) and `shows/pixel` (flat 2D: a diner that cuts to a living room,
-four characters and spoken dialogue).
+cut-track camera) and `shows/pixel` (flat 2D cutouts: a diner that cuts to a living
+room, four characters, close-ups and spoken dialogue).
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
@@ -332,8 +332,8 @@ table, not from ffmpeg.
 
 ## 2D mode
 
-`mode: 2d` swaps the renderer for the same Markdown. There is no camera, no march and
-no shading: every field is a flat shape evaluated in **screen space**, and the frame
+`mode: 2d` swaps the renderer for the same Markdown. There is no march, no shading and
+no 3D camera: every field is a flat shape evaluated in **screen space**, and the frame
 is painted back-to-front. The `Fields` table becomes a z-stack, exactly like the
 document order of an SVG:
 
@@ -358,13 +358,13 @@ The shipped 2D templates:
 | `ellipse2d.glsl` | ellipse (`rx`, `ry`) |
 | `box2d.glsl` | rounded box (`hx`, `hy`, `round`) |
 | `capsule2d.glsl` | capsule |
-| `head2d.glsl` | a head with shoulders (`wide`, `shoulders`) |
+| `head2d.glsl` | a big head on a small body (`wide`, `shoulders`) |
 | `hair2d.glsl` | one of four hair silhouettes (`style`, `fringe`) |
-| `face2d.glsl` | eyes, brows or mouth as separate layers (`kind`) |
+| `face2d.glsl` | sclera, brows, mouth or pupils as separate layers (`kind`) |
 | `seat2d.glsl` | a booth bench (`hw`, `hh`) |
 | `table2d.glsl` | a table top (`hw`) |
 | `sofa2d.glsl` | sofa: seat, short back, arms (`hw`, `back`) |
-| `lamp2d.glsl` | floor lamp with a glow (`glow`) |
+| `lamp2d.glsl` | floor lamp: shade, stand, base (`glow`) |
 | `window2d.glsl` | pane plus frame |
 
 ```markdown
@@ -372,8 +372,11 @@ The shipped 2D templates:
 | key     | value            |
 |---------|------------------|
 | mode    | 2d               |
-| pixel   | 9                |
-| outline | 0.007            |
+| pixel   | 1                |
+| outline | 0.005            |
+| zoom    | zoom             |
+| focus_x | focus_x          |
+| focus_y | focus_y          |
 | font    | 0.020            |
 | panel   | 2.60             |
 ```
@@ -381,8 +384,8 @@ The shipped 2D templates:
 Three consequences worth knowing before writing a 2D show:
 
 - **A layer is one flat fill.** A face cannot be one shape with painted features, so
-  it is several rows - head, hair, eyes, brows, mouth - each with its own colour.
-  Furniture splits the same way (a window is a pane plus a frame).
+  it is several rows - head, hair, white sclera, pupils, mouth - each with its own
+  colour. Furniture splits the same way (a window is a pane plus a frame).
 - **Cells are visibility, not operators.** `x` means the layer is absent; `u` and `u<k>`
   both mean "draw it"; `m<w>` is a fade gate at `w > 0.5`. min/max of two flat fills
   has no meaning.
@@ -402,9 +405,26 @@ does this with a diner (bars 0-8) and a living room (8-20):
 | 14-20 | x   | x           | x     | x     | x   | u          | u    | ... |
 ```
 
-`pixel` quantises the whole frame to a device grid before any layer is evaluated, so
-the look costs nothing extra; `outline` rims every layer and is antialiased with a
-`smoothstep`. Both may be tracks.
+### Cuts and close-ups
+
+There is no 3D camera in this mode, but the picture can still be pushed in. `zoom`
+magnifies around a focus point given by `focus_x`/`focus_y` in screen units; all
+three may be `cuts` tracks, so a shot change lands on a bar boundary:
+
+```markdown
+| name    | kind | values |
+|---------|------|--------|
+| zoom    | cuts | 0:1.0\|1:2.3\|3:1.0\|5:2.1 |
+| focus_x | cuts | 0:0.0\|1:-0.44\|3:0.0\|5:0.58 |
+| focus_y | cuts | 0:-0.12\|1:-0.08\|3:-0.12 |
+```
+
+`shows/pixel` cuts wide, close, close, wide on the speaker's bar. The outline is
+divided back out by the zoom, so the rim keeps a constant width on screen.
+
+`pixel` quantises the whole frame to a device grid before any layer is evaluated -
+the old pixel-art look, off (`1`) in this show. `outline` rims every layer and is
+antialiased with a `smoothstep`. Both may be tracks.
 
 The 3D sibling is `shows/diner`: the same `## Dialogue` format and the same booth, but
 raymarched, with a `cuts` track driving the camera.
@@ -470,7 +490,7 @@ characters fail the build rather than shrink below legibility.
 ## Checks
 
 ```powershell
-.venv\Scripts\python -m pytest -q        # 53 unit tests, no GPU needed
+.venv\Scripts\python -m pytest -q        # 58 unit tests, no GPU needed
 .venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
 ```
 
@@ -502,6 +522,10 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | letters are too big but the bubble is right | lower `font` only; `panel` is the padding, independent of type size |
 | every bubble shows the same line | a `ModifyFrame` closure captured the loop variable; bind the mask through a factory |
 | a bubble does not appear at the bar it should | `overlay_plan` windows are half-open in frames; sample inside `bars * bar` |
+| a bubble tail points at nobody | the bubble is placed from the speaker's `cx` and the camera track at that bar; check both |
+| a close-up shows the wrong character | `focus_x` at that bar is another speaker's `cx`; the shots are `cuts` keys |
+| faces look flat and mouthless | a mouth is one layer over the head; check its `kind=2` row is active and its track moves |
+| a hair cap covers the eyes | raise `fringe`; it is the lowest q.y the cap reaches |
 
 ## Project layout
 
@@ -513,7 +537,7 @@ shows/reel/     the 30-second reel: tunnel, Menger, gyroid, orbs, sun (morphs, f
 shows/demo/     the demoscene set (tunnel, Menger, gyroid, sun and columns)
 shows/ops/      subtract and intersect operators, plus a span=2 steps track
 shows/post/     a one-bar probe of the effect chain
-shows/pixel/    flat 2D pixel art: diner, then living room, four characters, dialogue
+shows/pixel/    flat 2D cutouts: diner, then living room, close-ups, dialogue
 shows/diner/    the 3D animation: two people in a booth, cut-track camera, dialogue
 shows/ring/     a one-field probe
 tests/          pytest suite + tests/gpu_parity.py (manual GPU check)

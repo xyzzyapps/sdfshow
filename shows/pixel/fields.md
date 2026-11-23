@@ -2,7 +2,8 @@
 
 Screen space for `mode: 2d`: x and y are the frame offset divided by frame height, so
 `y = 0` is the vertical centre, `y = -0.5` the bottom edge and `y = 0.5` the top. `x`
-runs about -0.89..0.89 at 16:9.
+runs about -0.89..0.89 at 16:9. `zoom` and `focus_x`/`focus_y` scale this space around a
+focus point, which is how the show cuts to close-ups.
 
 ## Fields
 
@@ -10,46 +11,46 @@ One table, ordered back to front. Both sets are listed and `Sections` decides wh
 drawn, so the diner furniture and the living-room furniture never overlap:
 
 - **diner** (bars 0-8): `sky`, `floor_diner`, `booth`, `table`, `cup`
-- **house** (bars 8-20): `wall_house`, `floor_house`, `sofa`, `rug`, `lamp`, `chair`
+- **house** (bars 8-20): `wall_house`, `floor_house`, `sofa`, `rug`, `lamp`
 
-Two people sit together in both rooms, at the same screen positions, which is what makes
-it read as one show rather than two.
+Every part of a face is its own row, because a 2D layer is one flat fill: white sclera,
+dark pupils, dark mouth. The same is true of furniture.
 
 | name | template | parameters |
 |------|----------|------------|
 | sky | box2d.glsl | cx=0, cy=0.30, hx=1.20, hy=0.55, round=0.0 |
 | floor_diner | box2d.glsl | cx=0, cy=-0.46, hx=1.20, hy=0.18, round=0.0 |
-| booth | seat2d.glsl | cx=0, cy=-0.30, s=0.40, hw=1.16, hh=0.11 |
+| booth | seat2d.glsl | cx=0, cy=-0.30, s=0.40, hw=1.16, hh=0.13 |
 | table | table2d.glsl | cx=0.06, cy=-0.29, s=0.40, hw=0.60 |
 | wall_house | box2d.glsl | cx=0, cy=0.30, hx=1.20, hy=0.55, round=0.0 |
 | floor_house | box2d.glsl | cx=0, cy=-0.44, hx=1.20, hy=0.20, round=0.0 |
-| sofa | sofa2d.glsl | cx=-0.10, cy=-0.40, s=0.46, hw=0.80, back=0.24 |
-| rug | ellipse2d.glsl | cx=-0.05, cy=-0.47, rx=0.90, ry=0.10 |
+| sofa | sofa2d.glsl | cx=-0.10, cy=-0.40, s=0.46, hw=0.92, back=0.26 |
+| rug | ellipse2d.glsl | cx=-0.05, cy=-0.46, rx=0.56, ry=0.06 |
 | lamp | lamp2d.glsl | cx=0.76, cy=-0.30, s=0.34, glow=0.08 |
-| chair | box2d.glsl | cx=-0.80, cy=-0.24, hx=0.15, hy=0.18, round=0.04 |
-| aina | head2d.glsl | cx=-0.44, cy=-0.13, s=0.27, wide=0.90, shoulders=1.0 |
-| aina_hair | hair2d.glsl | cx=-0.44, cy=-0.13, s=0.27, wide=0.90, fringe=0.16, style=0 |
-| aina_eye | face2d.glsl | cx=-0.44, cy=-0.09, s=0.34, kind=0, gap=0.125, eye_y=0.055, ew=0.048, eh=0.058, bw=0.070, brow_y=0.155, brow=brow_a, mouth_y=-0.145, mouth=mouth_a |
-| aina_brow | face2d.glsl | cx=-0.44, cy=-0.09, s=0.34, kind=1, gap=0.125, brow_y=0.155, bw=0.070, brow=brow_a, eye_y=0.055, ew=0.048, eh=0.058, mouth_y=-0.145, mouth=mouth_a |
-| aina_mouth | face2d.glsl | cx=-0.44, cy=-0.09, s=0.34, kind=2, bw=0.078, mouth_y=-0.145, mouth=mouth_a, gap=0.125, eye_y=0.055, ew=0.048, eh=0.058, brow_y=0.155, brow=brow_a |
-| boris | head2d.glsl | cx=0.06, cy=-0.13, s=0.27, wide=1.08, shoulders=1.1 |
-| boris_hair | hair2d.glsl | cx=0.06, cy=-0.13, s=0.27, wide=1.08, fringe=0.08, style=1 |
-| boris_eye | face2d.glsl | cx=0.06, cy=-0.09, s=0.34, kind=0, gap=0.135, eye_y=0.055, ew=0.046, eh=0.060, bw=0.073, brow_y=0.158, brow=brow_b, mouth_y=-0.140, mouth=mouth_b |
-| boris_brow | face2d.glsl | cx=0.06, cy=-0.09, s=0.34, kind=1, gap=0.135, brow_y=0.158, bw=0.073, brow=brow_b, eye_y=0.055, ew=0.046, eh=0.060, mouth_y=-0.140, mouth=mouth_b |
-| boris_mouth | face2d.glsl | cx=0.06, cy=-0.09, s=0.34, kind=2, bw=0.080, mouth_y=-0.140, mouth=mouth_b, gap=0.135, eye_y=0.055, ew=0.046, eh=0.060, brow_y=0.158, brow=brow_b |
-| dora | head2d.glsl | cx=0.58, cy=-0.13, s=0.27, wide=0.94, shoulders=1.05 |
-| dora_hair | hair2d.glsl | cx=0.58, cy=-0.13, s=0.27, wide=0.94, fringe=0.12, style=2 |
-| dora_eye | face2d.glsl | cx=0.58, cy=-0.09, s=0.34, kind=0, gap=0.128, eye_y=0.055, ew=0.050, eh=0.056, bw=0.068, brow_y=0.152, brow=brow_d, mouth_y=-0.142, mouth=mouth_d |
-| dora_brow | face2d.glsl | cx=0.58, cy=-0.09, s=0.34, kind=1, gap=0.128, brow_y=0.152, bw=0.068, brow=brow_d, eye_y=0.055, ew=0.050, eh=0.056, mouth_y=-0.142, mouth=mouth_d |
-| dora_mouth | face2d.glsl | cx=0.58, cy=-0.09, s=0.34, kind=2, bw=0.076, mouth_y=-0.142, mouth=mouth_d, gap=0.128, eye_y=0.055, ew=0.050, eh=0.056, brow_y=0.152, brow=brow_d |
-| ellis | head2d.glsl | cx=-0.78, cy=-0.13, s=0.27, wide=1.00, shoulders=0.95 |
-| ellis_hair | hair2d.glsl | cx=-0.78, cy=-0.13, s=0.27, wide=1.00, fringe=0.06, style=3 |
-| ellis_eye | face2d.glsl | cx=-0.78, cy=-0.09, s=0.34, kind=0, gap=0.130, eye_y=0.050, ew=0.044, eh=0.062, bw=0.066, brow_y=0.150, brow=brow_e, mouth_y=-0.138, mouth=mouth_e |
-| ellis_brow | face2d.glsl | cx=-0.78, cy=-0.09, s=0.34, kind=1, gap=0.130, brow_y=0.150, bw=0.066, brow=brow_e, eye_y=0.050, ew=0.044, eh=0.062, mouth_y=-0.138, mouth=mouth_e |
-| ellis_mouth | face2d.glsl | cx=-0.78, cy=-0.09, s=0.34, kind=2, bw=0.074, mouth_y=-0.138, mouth=mouth_e, gap=0.130, eye_y=0.050, ew=0.044, eh=0.062, brow_y=0.150, brow=brow_e |
+| aina | head2d.glsl | cx=-0.44, cy=-0.10, s=0.30, wide=0.92, shoulders=0.95 |
+| aina_hair | hair2d.glsl | cx=-0.44, cy=-0.10, s=0.30, wide=0.92, fringe=0.20, style=0 |
+| aina_eye | face2d.glsl | cx=-0.44, cy=-0.10, s=0.34, kind=0, gap=0.125, eye_y=0.075, ew=0.058, eh=0.066, bw=0.095, brow_y=0.160, brow=0, mouth_y=-0.110, mouth=mouth_a |
+| aina_pupil | face2d.glsl | cx=-0.44, cy=-0.10, s=0.34, kind=3, gap=0.125, eye_y=0.075, ew=0.058, eh=0.066, bw=0.095, brow_y=0.160, brow=0, mouth_y=-0.110, mouth=mouth_a |
+| aina_mouth | face2d.glsl | cx=-0.44, cy=-0.10, s=0.34, kind=2, gap=0.125, eye_y=0.075, ew=0.058, eh=0.066, bw=0.095, brow_y=0.160, brow=0, mouth_y=-0.110, mouth=mouth_a |
+| boris | head2d.glsl | cx=0.06, cy=-0.10, s=0.30, wide=1.10, shoulders=1.12 |
+| boris_hair | hair2d.glsl | cx=0.06, cy=-0.10, s=0.30, wide=1.10, fringe=0.20, style=1 |
+| boris_eye | face2d.glsl | cx=0.06, cy=-0.10, s=0.34, kind=0, gap=0.135, eye_y=0.075, ew=0.056, eh=0.068, bw=0.100, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_b |
+| boris_pupil | face2d.glsl | cx=0.06, cy=-0.10, s=0.34, kind=3, gap=0.135, eye_y=0.075, ew=0.056, eh=0.068, bw=0.100, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_b |
+| boris_mouth | face2d.glsl | cx=0.06, cy=-0.10, s=0.34, kind=2, gap=0.135, eye_y=0.075, ew=0.056, eh=0.068, bw=0.100, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_b |
+| dora | head2d.glsl | cx=0.58, cy=-0.10, s=0.30, wide=0.96, shoulders=1.00 |
+| dora_hair | hair2d.glsl | cx=0.58, cy=-0.10, s=0.30, wide=0.96, fringe=0.20, style=2 |
+| dora_eye | face2d.glsl | cx=0.58, cy=-0.10, s=0.34, kind=0, gap=0.128, eye_y=0.075, ew=0.060, eh=0.064, bw=0.092, brow_y=0.160, brow=0, mouth_y=-0.112, mouth=mouth_d |
+| dora_pupil | face2d.glsl | cx=0.58, cy=-0.10, s=0.34, kind=3, gap=0.128, eye_y=0.075, ew=0.060, eh=0.064, bw=0.092, brow_y=0.160, brow=0, mouth_y=-0.112, mouth=mouth_d |
+| dora_mouth | face2d.glsl | cx=0.58, cy=-0.10, s=0.34, kind=2, gap=0.128, eye_y=0.075, ew=0.060, eh=0.064, bw=0.092, brow_y=0.160, brow=0, mouth_y=-0.112, mouth=mouth_d |
+| ellis | head2d.glsl | cx=-0.78, cy=-0.10, s=0.30, wide=1.02, shoulders=0.92 |
+| ellis_hair | hair2d.glsl | cx=-0.78, cy=-0.10, s=0.30, wide=1.02, fringe=0.20, style=3 |
+| ellis_eye | face2d.glsl | cx=-0.78, cy=-0.10, s=0.34, kind=0, gap=0.130, eye_y=0.075, ew=0.056, eh=0.066, bw=0.098, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_e |
+| ellis_pupil | face2d.glsl | cx=-0.78, cy=-0.10, s=0.34, kind=3, gap=0.130, eye_y=0.075, ew=0.056, eh=0.066, bw=0.098, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_e |
+| ellis_mouth | face2d.glsl | cx=-0.78, cy=-0.10, s=0.34, kind=2, gap=0.130, eye_y=0.075, ew=0.056, eh=0.066, bw=0.098, brow_y=0.160, brow=0, mouth_y=-0.108, mouth=mouth_e |
 | cup | ellipse2d.glsl | cx=0.36, cy=-0.250, rx=0.034, ry=0.040 |
 
-Four silhouettes: Aina narrow, Boris broad, Dora long-haired, Ellis round and balding.
+Four silhouettes: Aina narrow with a bowl cut, Boris broad with a flat top, Dora
+long-haired, Ellis round and balding.
 
 ## Tracks
 
