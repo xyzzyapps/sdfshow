@@ -44,8 +44,8 @@ def test_time_comes_from_the_frame_index():
 def test_fields_and_tracks_are_named_functions():
     """Every field and track is its own function, in the generated source."""
     text = _scene()
-    assert "float field_core(vec3 p, float t)" in text
-    assert "float field_ring(vec3 p, float t)" in text
+    assert "float field_core(vec3 p, float t, float sf_detail)" in text
+    assert "float field_ring(vec3 p, float t, float sf_detail)" in text
     assert "float track_pulse(float t)" in text
     assert "float track_ring_radius(float t)" in text
 
@@ -53,7 +53,7 @@ def test_fields_and_tracks_are_named_functions():
 def test_sections_select_composition_operators():
     """The arrangement is visible in the scene function."""
     text = _scene()
-    assert "smin(d, field_ring(p, t), 0.3)" in text
+    assert "smin(d, field_ring(p, t, 0.0), 0.3)" in text
     assert "t < 4.0" in text and "t < 8.0" in text and "t < 12.0" in text
 
 
@@ -74,8 +74,8 @@ def test_demo_assembles_all_scene_templates():
     fields = load(show.fields_md, show.clock)
     text = assemble(show, fields)
     for field in ("tunnel", "menger", "gyroid", "sun", "pillars", "floor"):
-        assert f"float field_{field}(vec3 p, float t)" in text
-    assert "smin(d, field_pillars(p, t), 0.0)" in text
+        assert f"float field_{field}(vec3 p, float t, float sf_detail)" in text
+    assert "smin(d, field_pillars(p, t, 0.0), 0.0)" in text
     assert text.count("{") == text.count("}")
 
 

@@ -53,6 +53,10 @@ VIDEO_PRESET = "slow"
 VIDEO_PIX_FMT = "yuv420p"
 AUDIO_BITRATE = "192k"
 
+# Speech synthesis runs at the master rate so it never needs resampling.
+MASTER_SR = 48000
+VOICES = ("awb", "kal", "kal16", "rms", "slt")
+
 
 def unique_path(path: Path) -> Path:
     """Return *path*, or ``name_v2.ext`` / ``_v3`` ... if it already exists.

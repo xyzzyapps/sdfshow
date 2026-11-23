@@ -24,6 +24,26 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,
       `vapoursynth config`, compile, frame, render and parity all pass)
 
+## In progress: dialog scene (shows/bar)
+
+Infrastructure is in place and unit-tested; the bubble text does not render correctly
+yet. **Known bug**: the letters come out as vertical bars. The stroke font itself is
+correct - 	ools/font_probe.py and 	ools/bubble_probe.py both render the string
+cleanly - so the fault is the mapping from bubble space to cell space in
+ields/bubble_ink.glsl plus _ink in dialog.glsl_lines. Next steps: render the ink
+field with a single glyph and a hard-coded cell rectangle to find which axis is wrong,
+instead of iterating on the full scene.
+
+- [x] stroke font (sdfshow/glyphs.py, 44 glyphs) + two probes under 	ools/
+- [x] ## Dialogue table: one source for bubble text and spoken audio
+- [x] TTS via ffmpeg lite, placed at its bar and mixed (sdfshow/dialog.py)
+- [x] per-speaker bubble + ink templates generated into gen/
+- [x] sf_detail parameter so the marcher gets a cheap bound and only the material
+      pass evaluates glyphs (23.8 s -> 3.9 s per frame at 720p)
+- [ ] the bubble-text mapping bug above
+- [ ] two-scene framing (bar wide, then two-shot)
+- [ ] run the full render and check the audio lines land on their bubbles
+
 ## Next
 
 - [ ] choose and add a licence (none is declared yet)

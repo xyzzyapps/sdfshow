@@ -75,7 +75,7 @@ def test_morph_cell_generates_a_mix(tmp_path):
         encoding="utf-8",
     )
     shader = assemble(show, load(fields_md, show.clock))
-    assert "d = mix(d, field_ring(p, t), clamp(track_w(t), 0.0, 1.0));" in shader
+    assert "d = mix(d, field_ring(p, t, 0.0), clamp(track_w(t), 0.0, 1.0));" in shader
 
 
 def test_morph_cannot_start_a_section(tmp_path):

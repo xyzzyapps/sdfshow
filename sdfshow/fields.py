@@ -123,12 +123,17 @@ def _simple(text: str, values: dict[str, str], field_name: str) -> str:
     return _PLACEHOLDER.sub(repl, text)
 
 
-def load(path: Path, clock, extra_tracks: str = "") -> Fields:
+def load(
+    path: Path, clock, extra_tracks: str = "", gen_dir: Path | None = None
+) -> Fields:
     """Parse ``fields.md`` and render every field body for *clock*.
 
     *extra_tracks* is the show's ``show.md`` text: a ``## Tracks`` table may live in
     either file, so camera tracks can sit next to the Stage table and field tracks
     next to the fields. A name defined in both files is an error.
+
+    *gen_dir* is searched for templates before ``fields/``. Generated per-speaker
+    bubble templates land there.
     """
     text = path.read_text(encoding="utf-8")
     scalar = scalars(text)
@@ -185,7 +190,17 @@ def load(path: Path, clock, extra_tracks: str = "") -> Fields:
             expanded = _expand({key: raw}, name)[key]
             values[key] = expression(expanded, tracks)
 
-        body = _preprocess((C.FIELDS / template).read_text(encoding="utf-8"))
+        # Generated templates (per-speaker bubbles) live in gen/ and win over fields/,
+        # so a build artifact can never shadow the hand-written source.
+        path = gen_dir / template if gen_dir and (gen_dir / template).exists() else None
+        if path is None:
+            path = C.FIELDS / template
+        if not path.exists():
+            raise SystemExit(
+                f"fields.md: field '{name}' names a template that does not exist: "
+                f"{template}"
+            )
+        body = _preprocess(path.read_text(encoding="utf-8"))
         rendered = _simple(body, values, name)
         if "return" not in rendered:
             raise SystemExit(
@@ -197,14 +212,21 @@ def load(path: Path, clock, extra_tracks: str = "") -> Fields:
     return Fields(globals_, tracks, fields)
 
 
+def render_tracks(fields: Fields) -> str:
+    """The GLSL definitions for every track.
+
+    Emitted before the camera and the dialogue helpers, because both may reference a
+    track (`distance: dolly`).
+    """
+    return "\n".join(track_glsl(track) for track in fields.tracks.values())
+
+
 def render_functions(fields: Fields) -> str:
-    """The GLSL definitions for every track and field, in order."""
+    """The GLSL definitions for every field, in order."""
     parts: list[str] = []
-    for track in fields.tracks.values():
-        parts.append(track_glsl(track))
     for entry in fields.fields:
         parts.append(
-            f"float {entry.function}(vec3 p, float t) {{\n"
+            f"float {entry.function}(vec3 p, float t, float sf_detail) {{\n"
             f"    {entry.body}\n"
             f"}}\n"
         )

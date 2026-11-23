@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sdfshow.clock import Clock
-from sdfshow.fields import load, render_functions, split_params
+from sdfshow.fields import load, render_functions, render_tracks, split_params
 
 CLOCK = Clock(bpm=120.0, bars=8, fps=30, width=960, height=540)
 
@@ -46,8 +46,9 @@ def test_params_are_resolved_and_substituted(tmp_path):
 
 def test_render_functions_emit_one_per_field(tmp_path):
     """Each field becomes a named GLSL function."""
-    text = render_functions(_load(tmp_path))
-    assert "float field_core(vec3 p, float t)" in text
+    fields = _load(tmp_path)
+    text = render_functions(fields) + render_tracks(fields)
+    assert "float field_core(vec3 p, float t, float sf_detail)" in text
     assert "float track_pulse(float t)" in text
 
 

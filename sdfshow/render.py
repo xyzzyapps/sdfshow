@@ -19,8 +19,16 @@ from .show import Show
 
 def compile_show(show: Show) -> Path:
     """Generate ``gen/<show>/scene.glsl`` and ``gen/<show>/score.json``."""
+    # Bubbles are structural per speaker, so their templates are generated first and
+    # land in fields/ next to the hand-written ones. They are disposable.
+    from . import dialog
+
+    dialog.emit_bubble_templates(show, show.gen, C.FIELDS)
     fields = fields_mod.load(
-        show.fields_md, show.clock, show.show_md.read_text(encoding="utf-8")
+        show.fields_md,
+        show.clock,
+        show.show_md.read_text(encoding="utf-8"),
+        gen_dir=show.gen,
     )
     defined = {f.name for f in fields.fields}
     wanted = set(show.fields_order)
@@ -207,14 +215,25 @@ def _encode(
 
 
 def _audio(show: Show) -> Path | None:
-    """The show's audio track, if it declares one."""
-    if not show.audio:
-        return None
-    path = Path(show.audio)
-    path = path if path.is_absolute() else C.ROOT / path
-    if not path.exists():
-        raise SystemExit(f"show.md: audio file not found: {path}")
-    return path
+    """The show's audio track: a declared file, or synthesized dialogue.
+
+    ``audio:`` names an existing file; ``## Dialogue`` synthesizes speech from the same
+    table the bubbles read. A show can have either, and a declared file wins.
+    """
+    if show.audio:
+        path = Path(show.audio)
+        path = path if path.is_absolute() else C.ROOT / path
+        if not path.exists():
+            raise SystemExit(f"show.md: audio file not found: {path}")
+        return path
+    if getattr(show, "dialogue", None):
+        from . import dialog
+
+        track = dialog.synth(show)
+        if track is not None:
+            print(f"dialogue: {track}")
+        return track
+    return None
 
 
 def render(

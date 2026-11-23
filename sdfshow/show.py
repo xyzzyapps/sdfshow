@@ -24,7 +24,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config as C
+from . import dialog
 from .clock import Clock
+from .dialog import Line
 from .md import kv_table, rows, scalars, table_after
 
 _CELL = re.compile(r"^(?P<op>[usixm])(?P<k>.*)$")
@@ -116,6 +118,7 @@ class Show:
     materials: dict[str, Material] = field(default_factory=dict)
     effects: list[str] = field(default_factory=list)
     effect_params: dict[str, dict[str, str]] = field(default_factory=dict)
+    dialogue: list[Line] = field(default_factory=list)
     audio: str = ""
 
     @property
@@ -210,6 +213,7 @@ def parse(name: str, path: Path) -> Show:
         clock=clock,
         stage=kv_table(text),
         fields_order=order,
+        dialogue=dialog.parse(text),
         audio=scalar.get("audio", ""),
     )
 

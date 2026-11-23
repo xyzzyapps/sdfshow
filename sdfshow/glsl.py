@@ -15,7 +15,7 @@ from __future__ import annotations
 import colorsys
 
 from . import config as C
-from .fields import Fields, render_functions
+from .fields import Fields, render_functions, render_tracks
 from .show import Show, pattern_id
 from .tracks import Track, expression, num
 from .tracks import glsl as track_glsl
@@ -215,7 +215,7 @@ def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
                     continue
                 field_index = order.index(field_name)
                 fn = by_name[field_name].function
-                lines.append(f"    float dd{field_index} = {fn}(p, t);")
+                lines.append(f"    float dd{field_index} = {fn}(p, t, 1.0);")
                 lines.append(
                     f"    if (dd{field_index} < best) {{ best = dd{field_index}; "
                     f"id = {field_index}; }}"
@@ -228,22 +228,40 @@ def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
                 continue
             fn = by_name[field_name].function
             if base:
-                lines.append(f"    d = {fn}(p, t);")
+                lines.append(f"    d = {fn}(p, t, 0.0);")
                 base = False
                 continue
             k = _operand(cell, fields, field_name)
             if cell.op == "u":
-                lines.append(f"    d = smin(d, {fn}(p, t), {k});")
+                lines.append(f"    d = smin(d, {fn}(p, t, 0.0), {k});")
             elif cell.op == "s":
-                lines.append(f"    d = smax(d, -{fn}(p, t), {k});")
+                lines.append(f"    d = smax(d, -{fn}(p, t, 0.0), {k});")
             elif cell.op == "i":
-                lines.append(f"    d = smax(d, {fn}(p, t), {k});")
+                lines.append(f"    d = smax(d, {fn}(p, t, 0.0), {k});")
             elif cell.op == "m":
-                lines.append(f"    d = mix(d, {fn}(p, t), clamp({k}, 0.0, 1.0));")
+                lines.append(f"    d = mix(d, {fn}(p, t, 0.0), clamp({k}, 0.0, 1.0));")
         if base:
             lines.append("    d = 1e9;")
     lines.append("}")
     return "\n".join(lines)
+
+
+def _dialogue(show: Show) -> str:
+    """The stroke font and the show's dialogue strings, or nothing."""
+    if not show.dialogue:
+        return ""
+    from . import dialog
+    from .glyphs import BLANK, G, emit_glyph_function
+
+    drawable = set(G) | BLANK
+    letters = {c for line in show.dialogue for c in line.text.upper()}
+    missing = sorted(letters - drawable)
+    if missing:
+        raise SystemExit(
+            "show.md: the stroke font cannot draw: "
+            + " ".join(repr(c) for c in missing)
+        )
+    return emit_glyph_function(letters) + "\n" + dialog.glsl_lines(show)
 
 
 def assemble(show: Show, fields: Fields) -> str:
@@ -287,7 +305,8 @@ def assemble(show: Show, fields: Fields) -> str:
     light = _vec3(show.stage_value("light"), "light")
     background = _vec3(show.stage_value("background"), "background")
 
-    camera = f"""\
+    # Camera first: a bubble is billboarded, so a field may call camera_position.
+    camera_head = f"""\
 vec3 camera_target(float t) {{
     return {target};
 }}
@@ -299,6 +318,8 @@ vec3 camera_position(float t) {{
         cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw)
     );
 }}
+"""
+    camera = f"""\
 vec3 camera_ray(vec2 uv, float t) {{
     vec3 ro = camera_position(t);
     vec3 ta = normalize(camera_target(t) - ro);
@@ -431,6 +452,12 @@ vec3 render(vec2 uv, float t) {{
 {_PATTERN}
 {_NOISE}
 {_TRANSFORMS}
+
+{render_tracks(fields)}
+
+{camera_head}
+
+{_dialogue(show)}
 
 {render_functions(fields)}
 
