@@ -21,11 +21,12 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] shows: `first`, `ring`, `demo`, `ops`, `post`
 - [x] docs: `README.md`, `SPEC.md`, `TUTORIAL.md`
 - [x] GPU parity check (`tests/gpu_parity.py`, max error 0.0076 vs 0.01 tolerance)
+- [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,
+      `vapoursynth config`, compile, frame, render and parity all pass)
 
 ## Next
 
 - [ ] choose and add a licence (none is declared yet)
-- [ ] clean-room build from a fresh clone (venv, config, compile, render)
 - [ ] temporal effects via `std.AverageFrames` (trails/strobes) with cut guards
 - [ ] `placebo.Deband` for dark gradients (optional, one line in the pass chain)
 - [ ] frame cache / resume, only if 1080p shows become slow

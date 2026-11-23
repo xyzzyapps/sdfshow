@@ -8,5 +8,8 @@ __pycache__/
 # generated shader sources (the templates are the source of truth)
 gen/
 
+# clean-room verification checkout
+.cleanroom/
+
 # renders, frame caches and logs
 output/

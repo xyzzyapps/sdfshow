@@ -54,6 +54,10 @@ python -m venv .venv
 `%APPDATA%\vapoursynth\vapoursynth.toml`. `vspipe` needs it; without it you get
 `Failed to initialize VSScript`.
 
+Verified from a clean clone: clone, create the venv, `pip install -e .`,
+`python -m vapoursynth config`, then `compile`, `frame`, `render` and
+`tests/gpu_parity.py` all succeed with no extra steps.
+
 Render the worked example:
 
 ```powershell
