@@ -207,6 +207,49 @@ def _operand(cell, fields: Fields, field_name: str) -> str:
     return expression(raw, fields.tracks)
 
 
+def assemble_2d(show: Show, fields: Fields) -> str:
+    """A flat 2D scene: layers painted back-to-front, the way SVG stacks shapes.
+
+    Fields are evaluated in *screen* space, not world space: a field's ``cx``/``cy``
+    become screen coordinates and it returns a signed distance in those units. Each
+    layer that contains the sample paints over what is behind it, so the picture is
+    painter's algorithm over distance fields, with no raymarch at all.
+
+    That is what makes a pixel-art look affordable: one field evaluation per layer per
+    pixel, so the whole frame can be quantised to a pixel grid without the cost of a
+    march. It also means a 2D template is just a shape - a circle, a box, a polygon -
+    rather than a solid.
+    """
+    order = show.fields_order
+    by_name = fields.by_name()
+    colours = [_material_colour(i, n, show) for i, n in enumerate(order)]
+    outline = _motion(show, fields, "outline")
+    outline_rgb = _vec3(show.stage_value("outline_color"), "outline_color")
+    background = _vec3(show.stage_value("background"), "background")
+
+    # Back-to-front: later fields are drawn on top, matching the Fields table order
+    # read as a z-stack (first row is furthest back).
+    paints = "\n".join(
+        f"    d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0);\n"
+        f"    if (d < -o) {{ col = c[{i}]; }}\n"
+        f"    else if (d < 0.0) {{ col = mix({outline_rgb}, c[{i}], "
+        f"smoothstep(0.0, o, -d)); }}"
+        for i, name in enumerate(order)
+    )
+
+    return f"""\
+vec3 render_2d(vec2 uv, float t) {{
+    vec3 c[{len(colours)}] = vec3[{len(colours)}]({", ".join(colours)});
+    vec2 p2 = uv;
+    vec3 col = {background};
+    float o = {outline};
+    float d;
+{paints}
+    return col;
+}}
+"""
+
+
 def _section_chain(show: Show, fields: Fields, material: bool = False) -> str:
     """The nested ``if`` over the arrangement, shared by map and material passes."""
     bar = show.clock.bar
@@ -280,7 +323,17 @@ def _dialogue(show: Show) -> str:
 
 
 def assemble(show: Show, fields: Fields) -> str:
-    """Build the complete shader source for *show*."""
+    """Build the complete shader source for *show*.
+
+    Two rendering modes share the same prelude, tracks and field functions:
+
+    ``mode: 3d``  raymarch a signed distance field (the default)
+    ``mode: 2d``  paint flat layers back-to-front, like stacked SVG shapes
+
+    In 2D mode the raymarch, camera, normals, shadows and fog are not emitted at all;
+    the show is a stack of shapes in screen space. That is what lets a pixel-art look
+    stay cheap enough to quantise the whole frame.
+    """
     clock = show.clock
     order = show.fields_order
     colours = [_material_colour(index, name, show) for index, name in enumerate(order)]
@@ -454,6 +507,16 @@ vec3 render(vec2 uv, float t) {{
 }}
 """
 
+    mode = show.stage_value("mode").strip().lower()
+    if mode not in ("2d", "3d"):
+        raise SystemExit(f"show.md: stage 'mode' must be 2d or 3d (got '{mode}')")
+    if mode == "2d":
+        canvas = assemble_2d(show, fields)
+        render_call = "    vec3 col = render_2d(uv, t);"
+    else:
+        canvas = ""
+        render_call = "    vec3 col = render(uv, t);"
+
     hook = f"""\
 //!HOOK MAIN
 //!BIND HOOKED
@@ -476,6 +539,8 @@ vec3 render(vec2 uv, float t) {{
 
 {render_functions(fields)}
 
+{canvas}
+
 {_fold(show.stage_value("fold").strip().lower(), _motion(show, fields, "fold_count"))}
 
 {scene}
@@ -484,13 +549,16 @@ vec3 render(vec2 uv, float t) {{
 
 vec4 hook() {{
     vec2 res = target_size;
-    vec2 uv = (HOOKED_pos * res - 0.5 * res) / res.y;
+    // Pixel art: snap the sample to a grid of `pixel` device pixels. Quantising the
+    // coordinate (not the colour) keeps every shape crisp and gives the chunky lookup
+    // that reads as pixel art, with no texture and no supersampling.
+    float px = {_motion(show, fields, "pixel")};
+    vec2 snapped = floor(HOOKED_pos * res / px + 0.5) * px;
+    vec2 uv = (snapped - 0.5 * res) / res.y;
     uv.y = -uv.y;  // texture rows run top-down; put +y up
     float t = (float(frame) + TIME0) / FPS;
-    vec3 col = render(uv, t);
-    col = post(col, uv, HOOKED_pos * res, t);
-    float g = hash21(HOOKED_pos * res + float(frame)) - 0.5;
-    col += g * {post["grain"]};
+{render_call}
+    col = post(col, uv, snapped, t);
     return vec4(col, 1.0);
 }}
 """

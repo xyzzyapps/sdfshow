@@ -35,6 +35,12 @@ STAGE_DEFAULTS: dict[str, str] = {
     "hue": "0",
     "fold": "none",
     "fold_count": "6",
+    # 2D mode: draw flat layers instead of raymarching. `pixel` > 1 snaps the picture to
+    # a pixel grid, and `outline` draws a dark rim around every layer (SVG-like cutouts).
+    "mode": "3d",
+    "pixel": "1",
+    "outline": "0",
+    "outline_color": "0.06|0.05|0.08",
 }
 
 # Allowed `## Effects` pass names, in no particular order.

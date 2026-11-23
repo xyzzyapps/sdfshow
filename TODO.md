@@ -24,6 +24,23 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,
       `vapoursynth config`, compile, frame, render and parity all pass)
 
+## Done: 2D pixel-art mode (shows/pixel)
+
+mode: 2d is a second renderer: no raymarch, no camera, no normals. Every field is a
+flat shape in screen space and the frame is painted back-to-front, so the Fields table
+reads as a z-stack like an SVG document. pixel snaps the sample coordinate to a device
+grid and outline rims every layer.
+
+Because a 2D layer is one flat fill, faces are built from *separate* layers (head, hair,
+eyes, brows, mouth), each with its own colour - which is exactly how a pixel-art face is
+drawn, and why it reads.
+
+- [x] mode: 2d, pixel, outline, outline_color stage keys
+- [x] flat templates: llipse2d, ox2d, capsule2d, head2d, hair2d, ace2d
+- [x] shows/pixel: 12 bars, 8 lines, two characters, TTS, 30 s render
+- [ ] polygon2d (needs a vertex-list macro the template language does not have)
+- [ ] shows/diner and shows/bar are superseded; consolidate
+
 ## Done: SDF text via VapourSynth overlay, dialogue + TTS
 
 Text is no longer rendered in the shader. The stroke font is evaluated in numpy
