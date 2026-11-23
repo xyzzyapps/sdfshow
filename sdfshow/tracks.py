@@ -5,6 +5,8 @@ A track is a named scalar function of time, generated as GLSL:
 ``steps``   a list of values on a repeating grid of 16th-note steps (or ``span`` bars)
 ``bars``    one value per bar, interpolated to the next, looping
 ``keys``    explicit ``bar:value`` keys, piecewise interpolated, clamped outside
+``cuts``    like ``keys`` but stepped: the value holds until the next key. This is the
+            only way to express a hard cut, which an animated camera needs.
 ``expr``    a raw GLSL expression over ``t``, ``bar``, ``beat``, ``step``, ``dur``
 
 Everything else is a number. A field parameter may therefore be a literal, a track
@@ -54,7 +56,7 @@ _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d*\.?\d+|[+\-*/(),]")
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _NUMBER = re.compile(r"^-?\d*\.?\d+$")
 
-KINDS = ("steps", "bars", "keys", "expr")
+KINDS = ("steps", "bars", "keys", "expr", "cuts")
 
 
 def num(value: float) -> str:
@@ -164,7 +166,7 @@ def _make(name: str, kind: str, values: str, options: dict[str, str]) -> Track:
 
     if kind in ("steps", "bars"):
         return Track(name, kind, values=_numbers(name, values), span=span, ease=ease)
-    if kind == "keys":
+    if kind in ("keys", "cuts"):
         return Track(name, kind, keys=_key_list(name, values), ease=ease)
     expr = values.strip()
     if not expr:
@@ -211,7 +213,36 @@ def glsl(track: Track) -> str:
         )
     if track.kind in ("steps", "bars"):
         return _glsl_list(track)
+    if track.kind == "cuts":
+        return _glsl_cuts(track)
     return _glsl_keys(track)
+
+
+def _glsl_cuts(track: Track) -> str:
+    """Cuts: a value that holds until the next key, then steps.
+
+    A cut is a step function, so unlike ``keys`` it can carry two different values at
+    consecutive bars without blending between them, and unlike an animation it can
+    express a hard camera switch on the downbeat.
+
+    Generated as an if/else-if ladder, *not* a chain of ``v = cond ? a : v`` lines: a
+    chain lets every later comparison overwrite an earlier one, which silently collapses
+    all the values together.
+    """
+    first_bar, first_value = track.keys[0]
+    lines = [
+        f"float {track.function}(float t) {{",
+        "    float x = t / BAR;",
+    ]
+    if first_bar > 0:
+        lines.append(f"    if (x < {num(first_bar)}) return {num(first_value)};")
+    for index in range(1, len(track.keys)):
+        bar, _value = track.keys[index]
+        value = track.keys[index - 1][1]
+        lines.append(f"    if (x < {num(bar)}) return {num(value)};")
+    lines.append(f"    return {num(track.keys[-1][1])};")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
 
 
 def _glsl_list(track: Track) -> str:

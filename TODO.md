@@ -24,7 +24,27 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] clean-room build from a fresh clone (clone, venv, `pip install -e .`,
       `vapoursynth config`, compile, frame, render and parity all pass)
 
-## In progress: dialog scene (shows/bar)
+## Done: SDF text via VapourSynth overlay, dialogue + TTS
+
+Text is no longer rendered in the shader. The stroke font is evaluated in numpy
+(sdfshow/textmask.py), giving a signed-distance mask that is word-wrapped, sized to
+fit its budget and antialiased analytically. ender.py composites the masks with
+std.MaskedMerge after the SDF passes, so type never enters the raymarch.
+
+Fixed along the way: Cut track kind (step keys, needed for hard camera cuts),
+per-component animated 	arget, and three collision bugs where a template local
+shadowed 	.
+
+- [x] sdfshow/textmask.py: SDF text, word wrap, fit-to-width, rounded panel, tail
+- [x] VapourSynth overlay compositing (std.MaskedMerge; there is no Overlay)
+- [x] sdfshow/dialog.py: one table drives bubbles and lite TTS
+- [x] cuts track kind, animated 	arget
+- [x] shows/diner: 16 bars, 9 cuts, 9 lines, two figures
+- [ ] known: each figure's torso shows the bench silhouette through it
+- [ ] known: shows/bar is superseded by shows/diner; delete or fold together
+- [ ] the second bench needs its own booth field with lip: 1
+
+## Old note: dialog scene (shows/bar)
 
 Infrastructure is in place and unit-tested; the bubble text does not render correctly
 yet. **Known bug**: the letters come out as vertical bars. The stroke font itself is

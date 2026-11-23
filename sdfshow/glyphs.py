@@ -14,6 +14,8 @@ speech bubble needs. Adding a glyph means adding one entry to ``GLYPHS``.
 
 from __future__ import annotations
 
+import itertools
+
 WIDTH = 0.58
 SPACE = 0.34
 
@@ -153,7 +155,7 @@ def _segments(name: str) -> list[tuple[float, float, float, float]]:
     """A glyph's polylines flattened into segments."""
     out = []
     for line in G[name]:
-        for (x1, y1), (x2, y2) in zip(line, line[1:], strict=False):
+        for (x1, y1), (x2, y2) in itertools.pairwise(line):
             out.append((x1, y1, x2, y2))
     return out
 

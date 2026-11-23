@@ -162,6 +162,21 @@ def _vec3(value: str, where: str) -> str:
     return "vec3(" + ", ".join(_f(p, where) for p in parts) + ")"
 
 
+def _vec3_motion(show: Show, fields: Fields, key: str) -> str:
+    """A ``x|y|z`` stage value where each component may be a track expression.
+
+    This is what lets the camera look at one face and then the other: ``target`` is the
+    look-at point, so animating its x swings the shot between two people.
+    """
+    raw = show.stage_value(key)
+    if not raw:
+        raise SystemExit(f"show.md: stage '{key}' has no default and no value")
+    parts = [p.strip() for p in raw.split("|") if p.strip()]
+    if len(parts) != 3:
+        raise SystemExit(f"show.md: stage '{key}' must be x|y|z (got '{raw}')")
+    return "vec3(" + ", ".join(expression(p, fields.tracks) for p in parts) + ")"
+
+
 def _motion(show: Show, fields: Fields, key: str) -> str:
     """A stage value as a GLSL expression (a number, a track, or arithmetic)."""
     raw = show.stage_value(key)
@@ -301,7 +316,7 @@ def assemble(show: Show, fields: Fields) -> str:
         key: _motion(show, fields, key)
         for key in ("scanlines", "plasma", "grain", "vignette", "hue")
     }
-    target = _vec3(show.stage_value("target"), "target")
+    target = _vec3_motion(show, fields, "target")
     light = _vec3(show.stage_value("light"), "light")
     background = _vec3(show.stage_value("background"), "background")
 

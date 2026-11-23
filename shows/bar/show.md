@@ -45,10 +45,6 @@ size: 1280x720
 | booth   |
 | aina    |
 | boris   |
-| bub_a   |
-| bub_b   |
-| inka    |
-| inkb    |
 
 ## Materials
 
@@ -59,17 +55,13 @@ size: 1280x720
 | booth | 0.28\|0.10\|0.12 | none    | 1.0   |
 | aina  | 0.95\|0.72\|0.45 | none    | 1.0   |
 | boris | 0.55\|0.70\|0.95 | none    | 1.0   |
-| bub_a | 0.98\|0.96\|0.90 | none    | 1.0   |
-| inka  | 0.10\|0.08\|0.06 | none    | 1.0   |
-| bub_b | 0.90\|0.95\|1.00 | none    | 1.0   |
-| inkb  | 0.10\|0.08\|0.06 | none    | 1.0   |
 
 ## Sections
 
-| bars | floor | counter | booth | aina | boris | bub_a | bub_b | inka | inkb |
+| bars | floor | counter | booth | aina | boris |
 |------|-------|-----|-------|------|-------|-------|-------|
-| 0-4  | u     | u       | u     | u    | u     | u     | u     | u    | u    |
-| 4-8  | u     | u       | u     | u    | u     | u     | u     | u    | u    |
+| 0-4  | x     | x       | x     | u    | x     |
+| 4-8  | x     | x       | x     | u    | x     |
 
 ## Dialogue
 
@@ -91,7 +83,7 @@ figure reads as talking rather than as a static bust.
 
 | name    | kind | values | options |
 |---------|------|--------|---------|
-| dolly   | keys | 0:7.0\|4:6.4\|4.4:4.6\|8:4.2 | ease=smooth |
+| dolly   | keys | 0:7.0\|4:6.6\|4.4:5.6\|8:5.2 | ease=smooth |
 | yaw     | keys | 0:0.26\|4:0.16\|4.4:0.02\|8:-0.02 | ease=smooth |
 | mouth_a | expr | (t > 2.67 && t < 5.33) ? 0.5+0.5*sin(t*26.0) : (t > 13.33 && t < 16.0) ? 0.5+0.5*sin(t*24.0) : 0.06 | |
 | mouth_b | expr | (t > 5.33 && t < 8.0) ? 0.5+0.5*sin(t*23.0) : (t > 16.0) ? 0.5+0.5*sin(t*25.0) : 0.06 | |

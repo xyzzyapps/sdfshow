@@ -154,7 +154,13 @@ def synth(show) -> Path | None:
     for index in range(len(lines)):
         inputs += ["-i", str(work / f"{index:02d}.wav")]
     mix = "".join(f"[a{i}]" for i in range(len(lines)))
-    graph = ";".join(parts) + f";{mix}amix=inputs={len(lines)}:normalize=0[mixed]"
+    # `pad` fills the tail with silence so the audio track is exactly as long as the
+    # show. Without it the mix ends with the last spoken line and ffmpeg's -shortest
+    # would cut the video short.
+    graph = (
+        ";".join(parts) + f";{mix}amix=inputs={len(lines)}:normalize=0,"
+        f"apad=whole_dur={duration:g}[mixed]"
+    )
 
     out = show.logs / "dialogue.wav"
     import subprocess
@@ -217,6 +223,53 @@ def emit_bubble_templates(show, gen_dir: Path, fields_dir: Path) -> list[str]:
             target.write_text(source.replace("{{speaker}}", name), encoding="utf-8")
             written.append(target.name)
     return written
+
+
+def overlay_plan(show, gen_dir: Path):
+    """Build every bubble's masks and return the placements for the overlay pass.
+
+    Each line becomes one entry: its mask files, the pixel rectangle it occupies and
+    the bar window it is visible in. The generated VapourSynth script turns these into
+    ``std.BlankClip`` + ``std.Overlay`` steps, so text never touches the raymarch.
+    """
+    import numpy as np
+
+    from . import textmask
+
+    lines = getattr(show, "dialogue", [])
+    if not lines:
+        return []
+    masks = gen_dir / "bubbles"
+    masks.mkdir(parents=True, exist_ok=True)
+    width, height = show.clock.width, show.clock.height
+    bar = show.clock.bar
+
+    plan = []
+    for index, line in enumerate(lines):
+        cap = max(10, round(height * 0.042))
+        # The tail points back at its speaker: left seat points left, right points right.
+        left_seat = show.dialogue and (index % 2 == 0)
+        item = textmask.bubble(
+            line.text, cap, tail_right=not left_seat, max_width=width * 0.40
+        )
+        bw, bh = item.size
+        # Seat the bubble above the speaker's head, inside the frame.
+        x = round(width * (0.14 if left_seat else 0.56))
+        y = round(height * 0.16)
+        x = min(x, width - bw - 4)
+        np.save(masks / f"{index:02d}_panel.npy", item.panel)
+        np.save(masks / f"{index:02d}_ink.npy", item.ink)
+        plan.append(
+            {
+                "x": max(4, x),
+                "y": max(4, y),
+                "w": bw,
+                "h": bh,
+                "from": line.lo * bar,
+                "to": line.hi * bar,
+            }
+        )
+    return plan
 
 
 def glsl_lines(show) -> str:
