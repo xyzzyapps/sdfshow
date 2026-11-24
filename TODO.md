@@ -83,6 +83,9 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] `tools/prep_sprites.py`: key a baked checkerboard, keep the sprite, refill enclosed
       light regions, erode the anti-aliased rim; writes `assets/sprites/{boy,pirate}.png`
 - [x] island cast replaced by two sprite actors (idle + talking over their own lines)
+- [x] sprite `flip` (the boy faces the pirate) and `cycle`/`alt` (lip flap, walk-in,
+      laugh); the boy walks in place for the first bar, the pirate points then talks and
+      laughs on his second line
 - [x] Boris's shirt moved from brick (the booth colour) to violet, so he reads against
       the diner
 - [x] `bars: auto`: the clock measures the last `## Dialogue` bar, so the show stops

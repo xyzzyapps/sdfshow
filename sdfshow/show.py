@@ -54,6 +54,9 @@ class Sprite:
     x: float
     y: float
     height: float
+    flip: bool = False
+    cycle: int = 0
+    alt: int = 0
 
 
 @dataclass(frozen=True)
@@ -484,5 +487,19 @@ def _sprites(text: str, base: Path) -> list[Sprite]:
             ) from exc
         if frame < 0 or height <= 0:
             raise SystemExit(f"show.md: sprite '{ident}' frame/height out of range")
-        out.append(Sprite(ident, sheet, cell, lo, hi, frame, x, y, height))
+        try:
+            flip = bool(int(row[8])) if len(row) > 8 and row[8] else False
+            cycle = int(row[9]) if len(row) > 9 and row[9] else 0
+            alt = int(row[10]) if len(row) > 10 and row[10] else 0
+        except ValueError as exc:
+            raise SystemExit(
+                f"show.md: sprite '{ident}' flip/cycle/alt must be numbers"
+            ) from exc
+        if cycle < 0 or alt < 0:
+            raise SystemExit(
+                f"show.md: sprite '{ident}' cycle/alt must not be negative"
+            )
+        out.append(
+            Sprite(ident, sheet, cell, lo, hi, frame, x, y, height, flip, cycle, alt)
+        )
     return out

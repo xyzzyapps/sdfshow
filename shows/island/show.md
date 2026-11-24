@@ -114,17 +114,22 @@ One continuous scene, so one section covering the whole show.
 
 ## Sprites
 
-Raster actors over the SDF set. Idle for the whole show, talking over the speaker's own
-lines; later rows win inside their window, so the order matters.
+Raster actors over the SDF set. Later rows win inside their window; `cycle`/`alt` flip
+between two frames every N frames, which is the lip flap, the walk-in and the laugh.
+`flip 1` mirrors the boy so he faces the pirate.
 
-| id | sheet | cell | bars | frame | x | y | height |
-|----|-------|------|------|-------|-----|-----|--------|
-| pirate | assets/sprites/pirate.png | 126x88 | 0-11 | 0 | -0.50 | -0.295 | 0.34 |
-| pirate | assets/sprites/pirate.png | 126x88 | 4-6 | 1 | -0.50 | -0.295 | 0.34 |
-| pirate | assets/sprites/pirate.png | 126x88 | 9-11 | 1 | -0.50 | -0.295 | 0.34 |
-| boy | assets/sprites/boy.png | 200x234 | 0-11 | 0 | 0.40 | -0.295 | 0.38 |
-| boy | assets/sprites/boy.png | 200x234 | 1-3 | 1 | 0.40 | -0.295 | 0.38 |
-| boy | assets/sprites/boy.png | 200x234 | 7-8 | 1 | 0.40 | -0.295 | 0.38 |
+| id | sheet | cell | bars | frame | x | y | height | flip | cycle | alt |
+|----|-------|------|------|-------|-----|-----|--------|------|-------|-----|
+| pirate | assets/sprites/pirate.png | 126x88 | 0-11 | 0 | -0.50 | -0.295 | 0.34 | 0 | 0 | 0 |
+| pirate | assets/sprites/pirate.png | 126x88 | 4-4.4 | 2 | -0.50 | -0.295 | 0.34 | 0 | 0 | 0 |
+| pirate | assets/sprites/pirate.png | 126x88 | 4.4-6 | 1 | -0.50 | -0.295 | 0.34 | 0 | 4 | 0 |
+| pirate | assets/sprites/pirate.png | 126x88 | 9-9.4 | 3 | -0.50 | -0.295 | 0.34 | 0 | 0 | 0 |
+| pirate | assets/sprites/pirate.png | 126x88 | 9.4-11 | 1 | -0.50 | -0.295 | 0.34 | 0 | 4 | 0 |
+| boy | assets/sprites/boy.png | 200x234 | 0-1 | 3 | 0.40 | -0.295 | 0.38 | 1 | 4 | 4 |
+| boy | assets/sprites/boy.png | 200x234 | 1-11 | 0 | 0.40 | -0.295 | 0.38 | 1 | 0 | 0 |
+| boy | assets/sprites/boy.png | 200x234 | 1-3 | 1 | 0.40 | -0.295 | 0.38 | 1 | 4 | 0 |
+| boy | assets/sprites/boy.png | 200x234 | 7-7.3 | 2 | 0.40 | -0.295 | 0.38 | 1 | 0 | 0 |
+| boy | assets/sprites/boy.png | 200x234 | 7.3-8 | 1 | 0.40 | -0.295 | 0.38 | 1 | 4 | 0 |
 
 ## Dialogue
 

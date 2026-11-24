@@ -207,22 +207,29 @@ def pad(frames: list[np.ndarray]) -> list[np.ndarray]:
 
 
 def pirate_frames(sheet: np.ndarray) -> list[np.ndarray]:
-    """Idle, talking and pointing from the pirate sheet's first row."""
+    """Idle, talking, pointing, laughing and surprised from the pirate sheet."""
     rows, cols = 6, 6
     height, width, _ = sheet.shape
     ch, cw = height / rows, width / cols
     frames = []
-    for col in (0, 2, 4):
+    for col in (0, 2, 4, 3, 5):
         y0, x0 = 0, int(col * cw)
         frames.append(cut(sheet[y0 : int(ch), x0 : int((col + 1) * cw)]))
     return pad(frames)
 
 
 def boy_frames(sheet: np.ndarray) -> list[np.ndarray]:
-    """Idle, talking and pointing from the boy sheet's second row."""
+    """Idle, talking, pointing, then the walk cycle, from the boy sheet."""
     boxes = [(90, 252, 199, 481), (342, 252, 465, 482), (589, 254, 784, 485)]
+    walk = [
+        (78, 19, 182, 224),
+        (259, 20, 366, 224),
+        (440, 21, 547, 224),
+        (619, 21, 726, 225),
+        (806, 23, 910, 225),
+    ]
     frames = []
-    for x0, y0, x1, y1 in boxes:
+    for x0, y0, x1, y1 in boxes + walk:
         frames.append(cut(sheet[y0 : y1 + 1, x0 : x1 + 1]))
     return pad(frames)
 

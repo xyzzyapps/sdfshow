@@ -589,8 +589,10 @@ Sets stay SDF; actors may be raster. A `## Sprites` table names a sheet, a cell,
 window, a frame and a feet anchor. At render time each row is rasterised into a full-frame
 RGB plate and an alpha plate (`gen/<show>/sprites/*.npy`); the generated script picks the
 last plate whose window contains the frame and composites it with `MaskedMerge` after the
-SDF passes and before the captions. Rows for one id repeat over windows, so an idle row
-plus a talking row is an animation. The camera is static for sprites in this version.
+SDF passes and before the captions. Rows for one id repeat over windows, so an idle row plus a talking row is an animation.
+A row may also carry `flip` and `cycle`/`alt`: flip mirrors the plate, and cycle flips
+between the row's frame and the alternate every N frames - the lip flap and the walk-in.
+The camera is static for sprites in this version.
 
 ### 10.4 What 2D mode does not do
 

@@ -110,13 +110,17 @@ def write_script(
     sprite_text = (
         "[\n"
         + "".join(
-            "    {{'id': '{id}', 'first': {first}, 'last': {last}, "
-            "'rgb': r'{rgb}', 'a': r'{a}'}},\n".format(
+            "    {{'id': '{id}', 'first': {first}, 'last': {last}, 'cycle': {cycle}, "
+            "'rgb': r'{rgb}', 'a': r'{a}', 'alt_rgb': r'{alt_rgb}', "
+            "'alt_a': r'{alt_a}'}},\n".format(
                 id=item["id"],
                 first=item["first"],
                 last=item["last"],
+                cycle=item["cycle"],
                 rgb=item["rgb"].as_posix(),
                 a=item["a"].as_posix(),
+                alt_rgb=item["alt_rgb"].as_posix() if item["alt_rgb"].name else "",
+                alt_a=item["alt_a"].as_posix() if item["alt_a"].name else "",
             )
             for item in sprite_plans
         )
@@ -195,26 +199,36 @@ clip = core.resize.Bicubic(
 )
 
 # Sprites are composited after the SDF passes, in table order, before the captions.
-def pick(items, n, key):
+def pick(items, n):
     """The last sprite row whose window contains frame *n*."""
     chosen = None
     for item in items:
         if item["first"] <= n < item["last"]:
             chosen = item
-    return chosen[key] if chosen is not None else None
+    return chosen
+
+def chose(item, n, key):
+    """Flip between the main and alternate plate every ``cycle`` frames."""
+    if item["cycle"] and ((n - item["first"]) // item["cycle"]) % 2 == 1:
+        return item["alt_" + key]
+    return item[key]
 
 def make_rgb(items):
     """A callback that paints the chosen plate, or nothing."""
     def apply(n, f):
-        arr = pick(items, n, "rgb_arr")
-        return put(n, f, arr if arr is not None else np.zeros((H, W, 3), np.float32))
+        item = pick(items, n)
+        if item is None:
+            return put(n, f, np.zeros((H, W, 3), np.float32))
+        return put(n, f, chose(item, n, "rgb_arr"))
     return apply
 
 def make_alpha(items):
     """A callback that paints the chosen alpha plate, or nothing."""
     def apply(n, f):
-        arr = pick(items, n, "a_arr")
-        return put_mask(n, f, arr if arr is not None else np.zeros((H, W), np.float32))
+        item = pick(items, n)
+        if item is None:
+            return put_mask(n, f, np.zeros((H, W), np.float32))
+        return put_mask(n, f, chose(item, n, "a_arr"))
     return apply
 
 _GROUPS = []
@@ -226,6 +240,9 @@ for _sid, _items in _GROUPS:
     for _it in _items:
         _it["rgb_arr"] = np.load(_it["rgb"])
         _it["a_arr"] = np.load(_it["a"])
+        if _it["cycle"]:
+            _it["alt_rgb_arr"] = np.load(_it["alt_rgb"])
+            _it["alt_a_arr"] = np.load(_it["alt_a"])
     _sprite_rgb = core.std.BlankClip(
         width=W, height=H, format=vs.RGBS, length=NF, fpsnum=FPS, fpsden=1,
         color=[0.0, 0.0, 0.0],
@@ -428,9 +445,10 @@ def _sheet(path: Path) -> np.ndarray:
 def _sprite_plans(show: Show) -> list[dict]:
     """Rasterise every sprite row into full-frame plates.
 
-    Each row becomes one RGB plate and one alpha plate (``.npy`` in ``gen/<show>/sprites``).
-    The generated script picks the last plate whose window contains the frame, which is
-    how an idle row plus a talking row makes one character.
+    Each row becomes an RGB plate and an alpha plate (``.npy`` under ``gen/<show>/sprites``).
+    A row with ``cycle`` also gets an alternate plate, and the generated script flips
+    between them every *cycle* frames - that is the lip flap and the walk-in. The last
+    row whose window contains the frame wins.
     """
     if not show.sprites:
         return []
@@ -439,29 +457,24 @@ def _sprite_plans(show: Show) -> list[dict]:
     width, height = show.clock.width, show.clock.height
     sheets: dict[Path, np.ndarray] = {}
     plans: list[dict] = []
-    for index, sprite in enumerate(show.sprites):
-        sheet = sheets.get(sprite.sheet)
-        if sheet is None:
-            sheet = _sheet(sprite.sheet)
-            sheets[sprite.sheet] = sheet
+
+    def plate(sprite, sheet, frame, index, tag):
+        """Scale one cell to the placement and save its RGB and alpha plates."""
         cell_w, cell_h = sprite.cell
-        if sheet.shape[1] % cell_w or sheet.shape[0] < cell_h:
-            raise SystemExit(
-                f"show.md: sprite '{sprite.id}' sheet does not match cell {cell_w}x{cell_h}"
-            )
         columns = sheet.shape[1] // cell_w
-        if sprite.frame >= columns:
+        if frame >= columns:
             raise SystemExit(
-                f"show.md: sprite '{sprite.id}' frame {sprite.frame} is past {columns} cells"
+                f"show.md: sprite '{sprite.id}' frame {frame} is past {columns} cells"
             )
-        cell = sheet[:cell_h, sprite.frame * cell_w : (sprite.frame + 1) * cell_w]
+        cell = sheet[:cell_h, frame * cell_w : (frame + 1) * cell_w]
+        if sprite.flip:
+            cell = cell[:, ::-1]
         target_h = max(1, round(sprite.height * height))
         scale = target_h / cell_h
         target_w = max(1, round(cell_w * scale))
         rows = np.minimum((np.arange(target_h) / scale).astype(int), cell_h - 1)
         cols = np.minimum((np.arange(target_w) / scale).astype(int), cell_w - 1)
         small = cell[rows][:, cols]
-
         left = round(width * 0.5 + sprite.x * height - target_w / 2)
         top = round((0.5 - sprite.y) * height) - target_h
         sy0, sy1 = max(0, top), min(height, top + target_h)
@@ -472,20 +485,37 @@ def _sprite_plans(show: Show) -> list[dict]:
             patch = small[sy0 - top : sy1 - top, sx0 - left : sx1 - left]
             rgb[sy0:sy1, sx0:sx1] = patch[..., :3].astype(np.float32) / 255.0
             alpha[sy0:sy1, sx0:sx1] = patch[..., 3].astype(np.float32) / 255.0
-        rgb_path = out_dir / f"{index:02d}_rgb.npy"
-        alpha_path = out_dir / f"{index:02d}_a.npy"
+        rgb_path = out_dir / f"{index:02d}_{tag}_rgb.npy"
+        alpha_path = out_dir / f"{index:02d}_{tag}_a.npy"
         np.save(rgb_path, rgb)
         np.save(alpha_path, alpha)
+        return rgb_path, alpha_path
+
+    for index, sprite in enumerate(show.sprites):
+        sheet = sheets.get(sprite.sheet)
+        if sheet is None:
+            sheet = _sheet(sprite.sheet)
+            sheets[sprite.sheet] = sheet
+        cell_w, cell_h = sprite.cell
+        if sheet.shape[1] % cell_w or sheet.shape[0] < cell_h:
+            raise SystemExit(
+                f"show.md: sprite '{sprite.id}' sheet does not match cell {cell_w}x{cell_h}"
+            )
+        rgb_path, alpha_path = plate(sprite, sheet, sprite.frame, index, "a")
+        alt_rgb = alt_a = Path()
+        if sprite.cycle:
+            alt_rgb, alt_a = plate(sprite, sheet, sprite.alt, index, "b")
+        first = show.clock.frame_at(sprite.lo * show.clock.bar)
         plans.append(
             {
                 "id": sprite.id,
-                "first": show.clock.frame_at(sprite.lo * show.clock.bar),
-                "last": max(
-                    show.clock.frame_at(sprite.lo * show.clock.bar) + 1,
-                    show.clock.frame_at(sprite.hi * show.clock.bar),
-                ),
+                "first": first,
+                "last": max(first + 1, show.clock.frame_at(sprite.hi * show.clock.bar)),
                 "rgb": rgb_path,
                 "a": alpha_path,
+                "cycle": sprite.cycle,
+                "alt_rgb": alt_rgb,
+                "alt_a": alt_a,
             }
         )
     return plans

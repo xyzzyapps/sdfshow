@@ -485,16 +485,21 @@ table places them:
 
 ```markdown
 ## Sprites
-| id | sheet | cell | bars | frame | x | y | height |
-|----|-------|------|------|-------|-----|-----|--------|
-| pirate | assets/sprites/pirate.png | 126x88 | 0-11 | 0 | -0.50 | -0.295 | 0.34 |
-| pirate | assets/sprites/pirate.png | 126x88 | 4-6  | 1 | -0.50 | -0.295 | 0.34 |
+| id | sheet | cell | bars | frame | x | y | height | flip | cycle | alt |
+|----|-------|------|------|-------|-----|-----|--------|------|-------|-----|
+| pirate | assets/sprites/pirate.png | 126x88 | 0-11 | 0 | -0.50 | -0.295 | 0.34 | 0 | 0 | 0 |
+| pirate | assets/sprites/pirate.png | 126x88 | 4.4-6 | 1 | -0.50 | -0.295 | 0.34 | 0 | 4 | 0 |
+| boy | assets/sprites/boy.png | 200x234 | 1-3 | 1 | 0.40 | -0.295 | 0.38 | 1 | 4 | 0 |
 ```
 
 - `cell` is one frame in the sheet; `frame` counts cells left to right.
 - `x`/`y` is the feet anchor in screen units; `height` is the sprite height.
 - Rows for one id may repeat over bar windows. Later rows win inside their window, so an
-  idle row for the whole show plus a talking row over a line is enough.
+  idle row for the whole show plus a talking row over a line is enough. Bar ranges may be
+  fractional (`4.4-6`).
+- `cycle` and `alt` flip between the row's frame and frame `alt` every `cycle` frames:
+  the lip flap, the walk-in and the laugh. `cycle 0` is static.
+- `flip 1` mirrors the sprite in place, which is how the boy faces the pirate.
 - Sheets are composited after the SDF passes and before the captions, in table order.
 - The camera is static for sprites in this version: `zoom`/`focus_*` move the SDF
   background but not the actors.
