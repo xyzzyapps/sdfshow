@@ -78,6 +78,11 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] `stars2d`, `arch2d`, `fire2d` templates
 - [x] `shows/island`: a second 2D demo - night cliff, stone arch, campfire, two figures,
       caption dialogue, `bars: auto` ending on the last line
+- [x] raster actors: `## Sprites` table, plates in `gen/`, `MaskedMerge` after the SDF
+      passes; sheets resolved from the show folder or the repo root
+- [x] `tools/prep_sprites.py`: key a baked checkerboard, keep the sprite, refill enclosed
+      light regions, erode the anti-aliased rim; writes `assets/sprites/{boy,pirate}.png`
+- [x] island cast replaced by two sprite actors (idle + talking over their own lines)
 - [x] Boris's shirt moved from brick (the booth colour) to violet, so he reads against
       the diner
 - [x] `bars: auto`: the clock measures the last `## Dialogue` bar, so the show stops

@@ -580,8 +580,17 @@ dilated by two pixels to make a dark outline mask; the renderer paints white ins
 ink and near-black inside the ring, and the caption is centred at the top of the frame
 with no tail. `shows/island` uses it.
 
-Font and bubble are orthogonal to the renderer: bubbles work the same way over a
+Fonts and bubbles are orthogonal to the renderer: bubbles work the same way over a
 raymarched 3D show.
+
+### 10.5 Raster actors
+
+Sets stay SDF; actors may be raster. A `## Sprites` table names a sheet, a cell, a bar
+window, a frame and a feet anchor. At render time each row is rasterised into a full-frame
+RGB plate and an alpha plate (`gen/<show>/sprites/*.npy`); the generated script picks the
+last plate whose window contains the frame and composites it with `MaskedMerge` after the
+SDF passes and before the captions. Rows for one id repeat over windows, so an idle row
+plus a talking row is an animation. The camera is static for sprites in this version.
 
 ### 10.4 What 2D mode does not do
 
@@ -700,6 +709,8 @@ Automated (`pytest`):
   and a section cell of `x` removes the layer's paint block;
 - duration: `bars: auto` equals the last dialogue bar, fails without a Dialogue table,
   and a numeric `bars` shorter than a line fails by name;
+- sprites: a `## Sprites` row parses into a placement, a missing sheet fails by name, and
+  a sheet resolves relative to the show folder or the repo root;
 - bubble masks: `wrap`/`fit` never exceed the line budget, `text_mask` places its
   first baseline inside the canvas (the clipping regression), `panel` scales the
   padding without changing the ink, and a tail lands on the requested side;
@@ -871,7 +882,9 @@ Manual / visual:
 | `fields/*.glsl` | yes | template library (3D bodies and `*2d.glsl` flat layers) |
 | `fields/README.md` | yes | template-language guide |
 | `shows/pixel/{show,fields}.md` | yes | 2D cutout show: diner then living room, four characters, close-ups, dialogue |
-| `shows/island/{show,fields}.md` | yes | second 2D demo: night cliff, stone arch, campfire, caption dialogue |
+| `shows/island/{show,fields}.md` | yes | second 2D demo: SDF night set, sprite actors, caption dialogue |
+| `assets/sprites/*.png` | yes | cleaned RGBA sprite strips for `shows/island` |
+| `tools/prep_sprites.py` | yes | turn a baked-checker sheet into transparent sprite strips |
 | `shows/diner/{show,fields}.md` | yes | 3D animation: booth, two people, cut-track camera, dialogue |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |

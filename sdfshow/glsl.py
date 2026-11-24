@@ -227,6 +227,9 @@ def assemble_2d(show: Show, fields: Fields) -> str:
     order = show.fields_order
     by_name = fields.by_name()
     colours = [_material_colour(i, n, show) for i, n in enumerate(order)]
+    # Per-layer outline weight: tone layers set rim 0 so two fills meet seamlessly, while
+    # silhouettes keep the full rim.
+    rims = [num(show.materials[n].rim) if n in show.materials else "1.0" for n in order]
     outline = _motion(show, fields, "outline")
     outline_rgb = _vec3(show.stage_value("outline_color"), "outline_color")
     background = _vec3(show.stage_value("background"), "background")
@@ -252,9 +255,10 @@ def assemble_2d(show: Show, fields: Fields) -> str:
         body = "\n".join(
             f"    if ({_cell_gate(section.cells[name], index, show)}) {{\n"
             f"        d = {by_name[name].function}(vec3(p2, 0.0), t, 1.0) * z;\n"
-            f"        if (d < -o) {{ col = c[{i}]; }}\n"
+            f"        float oo = o * {rims[i]};\n"
+            f"        if (d < -oo) {{ col = c[{i}]; }}\n"
             f"        else if (d < 0.0) {{ col = mix({outline_rgb}, c[{i}], "
-            f"smoothstep(0.0, o, -d)); }}\n"
+            f"smoothstep(0.0, oo, -d)); }}\n"
             f"    }}"
             for i, name in enumerate(order)
         )

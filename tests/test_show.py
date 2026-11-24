@@ -230,3 +230,53 @@ def test_bad_material_pattern_raises(tmp_path):
     path.write_text(text, encoding="utf-8")
     with pytest.raises(SystemExit, match="unknown material pattern"):
         parse("test", path)
+
+
+SPRITE_SHOW = """\
+bpm: 120
+bars: 4
+fps: 30
+size: 640x360
+
+## Fields
+
+| field |
+|-------|
+| core |
+
+## Sections
+
+| bars | core |
+|------|------|
+| 0-4 | u |
+
+## Sprites
+
+| id | sheet | cell | bars | frame | x | y | height |
+|----|-------|------|------|-------|-----|-----|--------|
+| girl | sheet.png | 16x16 | 0-2 | 0 | 0.2 | -0.2 | 0.3 |
+| girl | sheet.png | 16x16 | 2-4 | 1 | 0.2 | -0.2 | 0.3 |
+"""
+
+
+def test_sprites_parse(tmp_path):
+    """A Sprites row becomes a placement with a sheet, a cell and a bar window."""
+    (tmp_path / "sheet.png").write_bytes(b"not really a png")
+    path = tmp_path / "show.md"
+    path.write_text(SPRITE_SHOW, encoding="utf-8")
+    show = parse("test", path)
+    assert len(show.sprites) == 2
+    sprite = show.sprites[0]
+    assert sprite.id == "girl"
+    assert sprite.cell == (16, 16)
+    assert (sprite.lo, sprite.hi) == (0.0, 2.0)
+    assert sprite.frame == 0
+    assert sprite.height == 0.3
+
+
+def test_sprite_sheet_must_exist(tmp_path):
+    """A missing sheet fails by name."""
+    path = tmp_path / "show.md"
+    path.write_text(SPRITE_SHOW, encoding="utf-8")
+    with pytest.raises(SystemExit, match="sheet not found"):
+        parse("test", path)

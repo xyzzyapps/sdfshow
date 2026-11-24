@@ -56,9 +56,9 @@ The two animations are `shows/diner` (3D, the first one: two people in a booth a
 cut-track camera) and `shows/pixel` (flat 2D cutouts: a diner that cuts to a living
 room, four characters, close-ups and spoken dialogue).
 
-`shows/island` is a second 2D demo in the grammar of a 1990s adventure game: a night
-cliff, a stone arch, a campfire, two figures and the spoken line as a caption at the top
-of the frame.
+`shows/island` is a second 2D demo in the grammar of a 1990s adventure game: an SDF
+night cliff, stone arch and campfire, with two raster sprite actors and the spoken line
+as a caption at the top of the frame.
 
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
@@ -477,6 +477,33 @@ size and panel size are separate stage keys: `font` is the cap height as a fract
 frame height, `panel` pads the bubble relative to the type. Lines longer than 48
 characters fail the build rather than shrink below legibility.
 
+## Sprites
+
+Backgrounds stay SDF; actors can be raster sprites, which is how an adventure scene was
+actually built. A sheet is a PNG strip of equally sized RGBA frames, and a `## Sprites`
+table places them:
+
+```markdown
+## Sprites
+| id | sheet | cell | bars | frame | x | y | height |
+|----|-------|------|------|-------|-----|-----|--------|
+| pirate | assets/sprites/pirate.png | 126x88 | 0-11 | 0 | -0.50 | -0.295 | 0.34 |
+| pirate | assets/sprites/pirate.png | 126x88 | 4-6  | 1 | -0.50 | -0.295 | 0.34 |
+```
+
+- `cell` is one frame in the sheet; `frame` counts cells left to right.
+- `x`/`y` is the feet anchor in screen units; `height` is the sprite height.
+- Rows for one id may repeat over bar windows. Later rows win inside their window, so an
+  idle row for the whole show plus a talking row over a line is enough.
+- Sheets are composited after the SDF passes and before the captions, in table order.
+- The camera is static for sprites in this version: `zoom`/`focus_*` move the SDF
+  background but not the actors.
+
+The source sheets here had no alpha (a baked checkerboard, a card border and labels), so
+`tools/prep_sprites.py` keys the light background, keeps the largest component, refills
+its enclosed light regions and erodes the anti-aliased rim. It writes
+`assets/sprites/{boy,pirate}.png`; run it with `.venv\Scripts\python -m tools.prep_sprites`.
+
 ## Commands
 
 | Command | What it does | Writes |
@@ -513,7 +540,7 @@ characters fail the build rather than shrink below legibility.
 ## Checks
 
 ```powershell
-.venv\Scripts\python -m pytest -q        # 69 unit tests, no GPU needed
+.venv\Scripts\python -m pytest -q        # 71 unit tests, no GPU needed
 .venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
 ```
 
@@ -565,6 +592,7 @@ shows/post/     a one-bar probe of the effect chain
 shows/pixel/    flat 2D cutouts: diner, then living room, close-ups, dialogue
 shows/diner/    the 3D animation: two people in a booth, cut-track camera, dialogue
 shows/island/   the second 2D demo: night cliff, stone arch, campfire, caption text
+assets/sprites/ cleaned sprite strips used by shows/island (Pip and the pirate)
 shows/ring/     a one-field probe
 tests/          pytest suite + tests/gpu_parity.py (manual GPU check)
 gen/            generated shaders and scores (gitignored)

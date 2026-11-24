@@ -1172,6 +1172,11 @@ rasterised by `textmask.py` into a panel mask and an ink mask, and
 `render.py` composites them with `std.MaskedMerge` over the line's frame window. The
 shader never sees a glyph.
 
+`shows/island` also shows the hybrid the format is good at: the set (sky, stars, arch,
+fire, ledge) is SDF, and the two actors are raster sprites from `assets/sprites/`,
+placed by a `## Sprites` table with an idle row and a talking row per character. The
+sprites are composited after the SDF passes and before the captions.
+
 `bubble: caption` in the Stage table swaps the speech bubble for a caption: white type
 with a dark outline, centred at the top of the frame, no panel. That is the grammar of a
 point-and-click adventure, and `shows/island` is the worked example.

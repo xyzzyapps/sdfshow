@@ -11,6 +11,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import numpy as np
+
 from . import config as C
 from . import dialog, glsl
 from . import fields as fields_mod
@@ -82,6 +84,7 @@ def write_script(
     script: Path | None = None,
     time_offset: int = 0,
     bubbles: list[dict] | None = None,
+    sprites: list[dict] | None = None,
 ) -> Path:
     """Write the VapourSynth script that shades the show.
 
@@ -103,6 +106,22 @@ def write_script(
         passes.append(path)
     scene_list = ", ".join(f'r"{p.as_posix()}"' for p in passes)
     plans = bubbles or []
+    sprite_plans = sprites or []
+    sprite_text = (
+        "[\n"
+        + "".join(
+            "    {{'id': '{id}', 'first': {first}, 'last': {last}, "
+            "'rgb': r'{rgb}', 'a': r'{a}'}},\n".format(
+                id=item["id"],
+                first=item["first"],
+                last=item["last"],
+                rgb=item["rgb"].as_posix(),
+                a=item["a"].as_posix(),
+            )
+            for item in sprite_plans
+        )
+        + "]"
+    )
     plan_text = (
         "[\n"
         + "".join(
@@ -132,6 +151,7 @@ core = vs.core
 W, H, FPS, NF = {clock.width}, {clock.height}, {clock.fps}, {clock.frames}
 PASSES = [{scene_list}]
 BUBBLES = {plan_text}
+SPRITES = {sprite_text}
 
 def shade(clip, path):
     """Run one generated libplacebo pass over *clip*."""
@@ -173,6 +193,50 @@ clip = core.resize.Bicubic(
     clip, width=W, height=H, format=vs.RGBS,
     matrix_in_s="470bg", range_in_s="limited",
 )
+
+# Sprites are composited after the SDF passes, in table order, before the captions.
+def pick(items, n, key):
+    """The last sprite row whose window contains frame *n*."""
+    chosen = None
+    for item in items:
+        if item["first"] <= n < item["last"]:
+            chosen = item
+    return chosen[key] if chosen is not None else None
+
+def make_rgb(items):
+    """A callback that paints the chosen plate, or nothing."""
+    def apply(n, f):
+        arr = pick(items, n, "rgb_arr")
+        return put(n, f, arr if arr is not None else np.zeros((H, W, 3), np.float32))
+    return apply
+
+def make_alpha(items):
+    """A callback that paints the chosen alpha plate, or nothing."""
+    def apply(n, f):
+        arr = pick(items, n, "a_arr")
+        return put_mask(n, f, arr if arr is not None else np.zeros((H, W), np.float32))
+    return apply
+
+_GROUPS = []
+for _item in SPRITES:
+    if not _GROUPS or _GROUPS[-1][0] != _item["id"]:
+        _GROUPS.append((_item["id"], []))
+    _GROUPS[-1][1].append(_item)
+for _sid, _items in _GROUPS:
+    for _it in _items:
+        _it["rgb_arr"] = np.load(_it["rgb"])
+        _it["a_arr"] = np.load(_it["a"])
+    _sprite_rgb = core.std.BlankClip(
+        width=W, height=H, format=vs.RGBS, length=NF, fpsnum=FPS, fpsden=1,
+        color=[0.0, 0.0, 0.0],
+    )
+    _sprite_rgb = core.std.ModifyFrame(_sprite_rgb, _sprite_rgb, make_rgb(_items))
+    _sprite_a = core.std.BlankClip(
+        width=W, height=H, format=vs.GRAYS, length=NF, fpsnum=FPS, fpsden=1, color=[0.0],
+    )
+    _sprite_a = core.std.ModifyFrame(_sprite_a, _sprite_a, make_alpha(_items))
+    clip = core.std.MaskedMerge(clip, _sprite_rgb, _sprite_a)
+
 for item in BUBBLES:
     panel = np.load(item["panel"])
     ink = np.load(item["ink"])
@@ -321,6 +385,112 @@ def _audio(show: Show) -> Path | None:
     return None
 
 
+def _sheet(path: Path) -> np.ndarray:
+    """Decode a sprite sheet to an ``(h, w, 4)`` uint8 array."""
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    width, height = (int(v) for v in probe.stdout.strip().split(","))
+    raw = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    return np.frombuffer(raw, np.uint8).reshape(height, width, 4)
+
+
+def _sprite_plans(show: Show) -> list[dict]:
+    """Rasterise every sprite row into full-frame plates.
+
+    Each row becomes one RGB plate and one alpha plate (``.npy`` in ``gen/<show>/sprites``).
+    The generated script picks the last plate whose window contains the frame, which is
+    how an idle row plus a talking row makes one character.
+    """
+    if not show.sprites:
+        return []
+    out_dir = show.gen / "sprites"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    width, height = show.clock.width, show.clock.height
+    sheets: dict[Path, np.ndarray] = {}
+    plans: list[dict] = []
+    for index, sprite in enumerate(show.sprites):
+        sheet = sheets.get(sprite.sheet)
+        if sheet is None:
+            sheet = _sheet(sprite.sheet)
+            sheets[sprite.sheet] = sheet
+        cell_w, cell_h = sprite.cell
+        if sheet.shape[1] % cell_w or sheet.shape[0] < cell_h:
+            raise SystemExit(
+                f"show.md: sprite '{sprite.id}' sheet does not match cell {cell_w}x{cell_h}"
+            )
+        columns = sheet.shape[1] // cell_w
+        if sprite.frame >= columns:
+            raise SystemExit(
+                f"show.md: sprite '{sprite.id}' frame {sprite.frame} is past {columns} cells"
+            )
+        cell = sheet[:cell_h, sprite.frame * cell_w : (sprite.frame + 1) * cell_w]
+        target_h = max(1, round(sprite.height * height))
+        scale = target_h / cell_h
+        target_w = max(1, round(cell_w * scale))
+        rows = np.minimum((np.arange(target_h) / scale).astype(int), cell_h - 1)
+        cols = np.minimum((np.arange(target_w) / scale).astype(int), cell_w - 1)
+        small = cell[rows][:, cols]
+
+        left = round(width * 0.5 + sprite.x * height - target_w / 2)
+        top = round((0.5 - sprite.y) * height) - target_h
+        sy0, sy1 = max(0, top), min(height, top + target_h)
+        sx0, sx1 = max(0, left), min(width, left + target_w)
+        rgb = np.zeros((height, width, 3), np.float32)
+        alpha = np.zeros((height, width), np.float32)
+        if sy1 > sy0 and sx1 > sx0:
+            patch = small[sy0 - top : sy1 - top, sx0 - left : sx1 - left]
+            rgb[sy0:sy1, sx0:sx1] = patch[..., :3].astype(np.float32) / 255.0
+            alpha[sy0:sy1, sx0:sx1] = patch[..., 3].astype(np.float32) / 255.0
+        rgb_path = out_dir / f"{index:02d}_rgb.npy"
+        alpha_path = out_dir / f"{index:02d}_a.npy"
+        np.save(rgb_path, rgb)
+        np.save(alpha_path, alpha)
+        plans.append(
+            {
+                "id": sprite.id,
+                "first": show.clock.frame_at(sprite.lo * show.clock.bar),
+                "last": max(
+                    show.clock.frame_at(sprite.lo * show.clock.bar) + 1,
+                    show.clock.frame_at(sprite.hi * show.clock.bar),
+                ),
+                "rgb": rgb_path,
+                "a": alpha_path,
+            }
+        )
+    return plans
+
+
 def render(
     show: Show,
     *,
@@ -352,10 +522,16 @@ def render(
             }
         )
 
+    sprite_plans = _sprite_plans(show)
+
     if static:
         frame = show.clock.frame_at(at)
         script = write_script(
-            show, show.gen / "still.vpy", time_offset=frame, bubbles=bubbles
+            show,
+            show.gen / "still.vpy",
+            time_offset=frame,
+            bubbles=bubbles,
+            sprites=sprite_plans,
         )
         target = out or C.unique_path(show.output / f"frame_{frame:05d}.png")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -374,7 +550,9 @@ def render(
     last = show.clock.frame_limit(end) - 1 if end is not None else show.clock.frames - 1
     if last < first:
         raise SystemExit("render: --to is before --from")
-    script = write_script(show, time_offset=first, bubbles=bubbles)
+    script = write_script(
+        show, time_offset=first, bubbles=bubbles, sprites=sprite_plans
+    )
     target = out or C.unique_path(show.video)
     target.parent.mkdir(parents=True, exist_ok=True)
     return _encode(

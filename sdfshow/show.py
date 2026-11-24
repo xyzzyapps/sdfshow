@@ -38,12 +38,37 @@ OPS = ("u", "s", "i", "x", "m")
 
 
 @dataclass(frozen=True)
+class Sprite:
+    """A raster sprite placed for a bar window.
+
+    ``cell`` is the frame size in the sheet, ``frame`` its index left to right, ``x``/``y``
+    the feet anchor in screen units and ``height`` the sprite's height in screen units.
+    """
+
+    id: str
+    sheet: Path
+    cell: tuple[int, int]
+    lo: float
+    hi: float
+    frame: int
+    x: float
+    y: float
+    height: float
+
+
+@dataclass(frozen=True)
 class Material:
-    """A field's base colour and an optional procedural surface pattern."""
+    """A field's base colour, an optional pattern and its outline weight.
+
+    ``rim`` scales the layer's outline: 1 draws the full rim, 0 none. Tone layers (a lit
+    cheek, a shadow panel) set 0 so the two fills meet without a dark seam; silhouettes
+    keep 1.
+    """
 
     color: tuple[float, float, float]
     pattern: str = "none"
     scale: float = 1.0
+    rim: float = 1.0
 
 
 def pattern_id(name: str) -> int:
@@ -120,6 +145,7 @@ class Show:
     effects: list[str] = field(default_factory=list)
     effect_params: dict[str, dict[str, str]] = field(default_factory=dict)
     dialogue: list[Line] = field(default_factory=list)
+    sprites: list[Sprite] = field(default_factory=list)
     audio: str = ""
 
     @property
@@ -289,7 +315,15 @@ def parse(name: str, path: Path) -> Show:
                     raise SystemExit(
                         f"show.md: material '{row[0]}' scale is not a number"
                     ) from exc
-            show.materials[row[0]] = Material(color, pattern, scale)  # type: ignore[arg-type]
+            rim = 1.0
+            if len(row) > 4 and row[4]:
+                try:
+                    rim = float(row[4])
+                except ValueError as exc:
+                    raise SystemExit(
+                        f"show.md: material '{row[0]}' rim is not a number"
+                    ) from exc
+            show.materials[row[0]] = Material(color, pattern, scale, rim)  # type: ignore[arg-type]
 
     for name, effect_params in _effects(text).items():
         show.effects.append(name)
@@ -304,6 +338,8 @@ def parse(name: str, path: Path) -> Show:
     if not show.sections:
         # No arrangement: every field is unioned for the whole show.
         show.sections = [Section(0, clock.bars, {name: Cell("u") for name in order})]
+
+    show.sprites = _sprites(text, path.parent)
 
     _check(show)
     return show
@@ -399,3 +435,54 @@ def load(name: str) -> Show:
             f"unknown show '{name}' (have: {', '.join(names()) or 'none'})"
         )
     return parse(name, C.SHOWS / name / "show.md")
+
+
+def _sprites(text: str, base: Path) -> list[Sprite]:
+    """Read the optional ``## Sprites`` table.
+
+    ``| id | sheet | cell | bars | frame | x | y | height |``. Rows for one id may repeat
+    over bar windows; later rows win inside their window, so an idle row over the whole
+    show followed by a talking row over a line is enough.
+    """
+    found = table_after(text, "Sprites")
+    if found is None:
+        return []
+    _header, body = found
+    out: list[Sprite] = []
+    for row in body:
+        if not row or not row[0]:
+            continue
+        if len(row) < 8:
+            raise SystemExit(
+                "show.md: a Sprites row needs id | sheet | cell | bars | frame | x | y | height"
+            )
+        ident = row[0].strip()
+        sheet = Path(row[1].strip())
+        if not sheet.is_absolute():
+            local = base / sheet
+            sheet = local if local.exists() else C.ROOT / sheet
+        if not sheet.exists():
+            raise SystemExit(f"show.md: sprite '{ident}' sheet not found: {sheet}")
+        match = re.fullmatch(r"(\d+)[xX](\d+)", row[2].strip())
+        if not match:
+            raise SystemExit(f"show.md: sprite '{ident}' cell must be WxH")
+        cell = (int(match.group(1)), int(match.group(2)))
+        match = re.fullmatch(r"([\d.]+)-([\d.]+)", row[3].strip())
+        if not match:
+            raise SystemExit(f"show.md: sprite '{ident}' bars must be A-B")
+        lo, hi = float(match.group(1)), float(match.group(2))
+        if hi <= lo:
+            raise SystemExit(f"show.md: sprite '{ident}' has an empty bar range")
+        try:
+            frame = int(row[4])
+            x = float(row[5])
+            y = float(row[6])
+            height = float(row[7])
+        except ValueError as exc:
+            raise SystemExit(
+                f"show.md: sprite '{ident}' frame/x/y/height must be numbers"
+            ) from exc
+        if frame < 0 or height <= 0:
+            raise SystemExit(f"show.md: sprite '{ident}' frame/height out of range")
+        out.append(Sprite(ident, sheet, cell, lo, hi, frame, x, y, height))
+    return out
