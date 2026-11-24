@@ -56,6 +56,10 @@ The two animations are `shows/diner` (3D, the first one: two people in a booth a
 cut-track camera) and `shows/pixel` (flat 2D cutouts: a diner that cuts to a living
 room, four characters, close-ups and spoken dialogue).
 
+`shows/island` is a second 2D demo in the grammar of a 1990s adventure game: a night
+cliff, a stone arch, a campfire, two figures and the spoken line as a caption at the top
+of the frame.
+
 ```powershell
 .venv\Scripts\python -m sdfshow frame  --show demo --at 2
 .venv\Scripts\python -m sdfshow render --show demo
@@ -63,6 +67,7 @@ room, four characters, close-ups and spoken dialogue).
 .venv\Scripts\python -m sdfshow render --show diner
 .venv\Scripts\python -m sdfshow frame  --show pixel --at 4
 .venv\Scripts\python -m sdfshow render --show pixel
+.venv\Scripts\python -m sdfshow render --show island
 ```
 
 - `compile` writes `gen/first/scene.glsl` and `gen/first/score.json`.
@@ -191,6 +196,7 @@ In `mode: 2d` the camera keys are ignored and these apply instead:
 | `outline_color` | rim colour | `0.06\|0.05\|0.08` |
 | `font` | bubble cap height as a fraction of frame height | `0.042` |
 | `panel` | bubble padding as a multiple of the type size | `1.0` |
+| `bubble` | speech presentation: `panel` or `caption` | `panel` |
 
 `font` and `panel` are independent: small letters, comfortable panel. Both work in
 3D shows too, since bubbles are an overlay.
@@ -373,6 +379,9 @@ The shipped 2D templates:
 | `sofa2d.glsl` | sofa: seat, short back, arms (`hw`, `back`) |
 | `lamp2d.glsl` | floor lamp: shade, stand, base (`glow`) |
 | `window2d.glsl` | pane plus frame |
+| `stars2d.glsl` | a hash-grid star field (`size`) |
+| `arch2d.glsl` | a stone arch: pillars and a ring (`hw`, `thick`, `drop`) |
+| `fire2d.glsl` | a wobbling flame (`wide`, `tall`, `speed`) |
 
 ```markdown
 ## Stage
@@ -459,6 +468,9 @@ An optional `## Dialogue` table drives the bubbles and the audio from one source
   so `voice` also accepts a pitch factor: `slt*0.92` is the same speaker, pitched
   down with rubberband so two women in one show do not sound identical.
 
+Set `bubble: caption` in the Stage table for SCUMM-style captions: white type with a
+dark outline, centred at the top of the frame, no panel and no tail.
+
 The masks are composited by VapourSynth after the SDF passes (`std.MaskedMerge`, one
 per line, over the line's frame window), so text is never part of the shader. Type
 size and panel size are separate stage keys: `font` is the cap height as a fraction of
@@ -501,7 +513,7 @@ characters fail the build rather than shrink below legibility.
 ## Checks
 
 ```powershell
-.venv\Scripts\python -m pytest -q        # 68 unit tests, no GPU needed
+.venv\Scripts\python -m pytest -q        # 69 unit tests, no GPU needed
 .venv\Scripts\python tests\gpu_parity.py # GPU: generated field vs a Python reference
 ```
 
@@ -552,6 +564,7 @@ shows/ops/      subtract and intersect operators, plus a span=2 steps track
 shows/post/     a one-bar probe of the effect chain
 shows/pixel/    flat 2D cutouts: diner, then living room, close-ups, dialogue
 shows/diner/    the 3D animation: two people in a booth, cut-track camera, dialogue
+shows/island/   the second 2D demo: night cliff, stone arch, campfire, caption text
 shows/ring/     a one-field probe
 tests/          pytest suite + tests/gpu_parity.py (manual GPU check)
 gen/            generated shaders and scores (gitignored)

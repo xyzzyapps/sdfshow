@@ -208,6 +208,7 @@ ignored there because there is no march and no world space.
 | `focus_y` | scene y at the centre of the frame when zoomed | `0` |
 | `font` | speech-bubble cap height as a fraction of frame height | `0.042` |
 | `panel` | bubble padding as a multiple of the type size | `1.0` |
+| `bubble` | speech presentation: `panel` (speech bubble) or `caption` (white type with a dark outline) | `panel` |
 
 `pixel` and `outline` are ordinary stage values and may be tracks, so the pixel size
 or the rim can animate. `font` and `panel` are deliberately independent: shrinking the
@@ -574,6 +575,11 @@ equals the panel's coverage inside the line's frame window and zero outside, and
 it. Loop closures bind the mask through a factory (`make_alpha`), not by late binding,
 or every bubble would show the last line's mask.
 
+With `bubble: caption`, the panel is replaced by a SCUMM-style caption. The ink mask is
+dilated by two pixels to make a dark outline mask; the renderer paints white inside the
+ink and near-black inside the ring, and the caption is centred at the top of the frame
+with no tail. `shows/island` uses it.
+
 Font and bubble are orthogonal to the renderer: bubbles work the same way over a
 raymarched 3D show.
 
@@ -696,7 +702,9 @@ Automated (`pytest`):
   and a numeric `bars` shorter than a line fails by name;
 - bubble masks: `wrap`/`fit` never exceed the line budget, `text_mask` places its
   first baseline inside the canvas (the clipping regression), `panel` scales the
-  padding without changing the ink, and a tail lands on the requested side.
+  padding without changing the ink, and a tail lands on the requested side;
+- captions: the outline mask contains the ink and stays close to it, i.e. it is a rim
+  rather than a panel.
 
 Manual / GPU (`tests/gpu_parity.py`, run via `task parity`):
 
@@ -863,6 +871,7 @@ Manual / visual:
 | `fields/*.glsl` | yes | template library (3D bodies and `*2d.glsl` flat layers) |
 | `fields/README.md` | yes | template-language guide |
 | `shows/pixel/{show,fields}.md` | yes | 2D cutout show: diner then living room, four characters, close-ups, dialogue |
+| `shows/island/{show,fields}.md` | yes | second 2D demo: night cliff, stone arch, campfire, caption dialogue |
 | `shows/diner/{show,fields}.md` | yes | 3D animation: booth, two people, cut-track camera, dialogue |
 | `shows/first/{show,fields}.md` | yes | worked example |
 | `shows/reel/{show,fields}.md` | yes | 30 s reel: five scenes, morphs, fold ripple, effect chain |
@@ -977,6 +986,11 @@ the format makes everywhere: the picture is a table, and every entry is inspecta
 alternative - a template that returns a colour per pixel - would turn templates into
 mini-shaders and lose the single-return contract that makes them cheap to write and to
 test.
+
+**An adventure scene is an homage, not a copy.** `shows/island` borrows the grammar of a
+1990s pixel-art adventure - a night cliff above the sea, a stone arch, a campfire between
+two figures, the spoken line in white type at the top - but not its art, characters or
+script. The caption style is a renderer feature (`bubble: caption`), not a screenshot.
 
 **The show length can be the dialogue length.** `bars: auto` measures the last line and
 sets the clock from it. A trailer or an outro is a numeric `bars`; a dialogue scene

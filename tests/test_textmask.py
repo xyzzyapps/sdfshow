@@ -58,3 +58,12 @@ def test_tail_points_at_the_requested_fraction():
         assert len(xs), "the tail should have coverage"
         centroid = xs.mean() / w
         assert abs(centroid - tip) < 0.2, f"tail at {centroid:.2f}, wanted {tip}"
+
+
+def test_caption_is_ink_inside_a_thin_outline():
+    """A caption is not a panel: the alpha is the ink grown by a couple of pixels."""
+    cap = textmask.caption("MAPS LIE.", 18, 600)
+    assert np.all(cap.panel >= cap.ink), "every glyph must be inside the alpha"
+    assert cap.panel.sum() > cap.ink.sum(), "there must be an outline ring"
+    ratio = float(cap.panel.sum()) / float(cap.ink.sum())
+    assert ratio < 4.0, f"outline grew to {ratio:.2f}x the ink - that is a panel"

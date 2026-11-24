@@ -74,6 +74,10 @@ Open work only. Design reasoning lives in `SPEC.md`.
 - [x] figure templates `neck2d`, `body2d`, `arms2d`, `legs2d`; mirroring needs `abs`
       on the local point, or the pair merges into one column
 - [x] opening line follows the staging: the cast stands, so Aina asks why
+- [x] `bubble: caption`: SCUMM-style white type with a dark outline, no panel
+- [x] `stars2d`, `arch2d`, `fire2d` templates
+- [x] `shows/island`: a second 2D demo - night cliff, stone arch, campfire, two figures,
+      caption dialogue, `bars: auto` ending on the last line
 - [x] Boris's shirt moved from brick (the booth colour) to violet, so he reads against
       the diner
 - [x] `bars: auto`: the clock measures the last `## Dialogue` bar, so the show stops

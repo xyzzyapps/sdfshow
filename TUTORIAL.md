@@ -1172,6 +1172,10 @@ rasterised by `textmask.py` into a panel mask and an ink mask, and
 `render.py` composites them with `std.MaskedMerge` over the line's frame window. The
 shader never sees a glyph.
 
+`bubble: caption` in the Stage table swaps the speech bubble for a caption: white type
+with a dark outline, centred at the top of the frame, no panel. That is the grammar of a
+point-and-click adventure, and `shows/island` is the worked example.
+
 The show's length is not a number to keep in step: `bars: auto` ends it on the last
 Dialogue bar, which is why the render is 50 seconds and the last line is the last thing
 said.
