@@ -52,6 +52,9 @@ STAGE_DEFAULTS: dict[str, str] = {
     # force a smaller (harder to read) bubble.
     "font": "0.042",
     "panel": "1.0",
+    # Speech presentation: `panel` is a rounded bubble; `caption` is SCUMM-style
+    # white type with a dark outline and no panel.
+    "bubble": "panel",
 }
 
 # Allowed `## Effects` pass names, in no particular order.

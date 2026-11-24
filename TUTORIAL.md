@@ -1108,9 +1108,9 @@ Three things follow from that loop, and they are the whole of 2D authoring:
 
 1. **Table order is depth.** The first row in `Fields` is furthest back. A character
    behind a table is listed before the table; there is no per-pixel depth test.
-2. **A layer is one flat fill.** A figure is nine rows - trousers, shirt, arms and
-   hands, head, hair, white sclera, pupils, mouth - because a single row cannot carry
-   shading or a second colour. A window is a pane plus a frame for the same reason.
+2. **A layer is one flat fill.** A figure is ten rows - trousers, neck, shirt, arms
+   and hands, head, hair, white sclera, pupils, mouth - because a single row cannot
+   carry shading or a second colour. A window is a pane plus a frame for the same reason.
 3. **A cell is visibility, not an operator.** `x` means the layer is absent; `u` and
    `u<k>` both mean "draw it". Two flat fills cannot be min/maxed, so `s` and `i` are
    meaningless here and `m<w>` becomes a fade gate at `w > 0.5`.
@@ -1161,7 +1161,7 @@ Dialogue comes from one table:
 ```markdown
 | speaker | bars | text                              | voice |
 |---------|------|-----------------------------------|-------|
-| AINA    | 1-2  | We have been sitting here for an hour. | slt |
+| AINA    | 1-2  | Why are we standing? | slt |
 ```
 
 `dialog.py` reads the speaker's `cx` from `fields.md` and applies the camera at that

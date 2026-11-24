@@ -107,13 +107,15 @@ def write_script(
         "[\n"
         + "".join(
             "    {{'x': {x}, 'y': {y}, 'w': {w}, 'h': {h}, 'first': {first}, "
-            "'last': {last}, 'panel': r'{panel}', 'ink': r'{ink}'}},\n".format(
+            "'last': {last}, 'style': '{style}', "
+            "'panel': r'{panel}', 'ink': r'{ink}'}},\n".format(
                 x=item["x"],
                 y=item["y"],
                 w=item["w"],
                 h=item["h"],
                 first=item["first"],
                 last=item["last"],
+                style=item["style"],
                 panel=item["panel"].as_posix(),
                 ink=item["ink"].as_posix(),
             )
@@ -174,7 +176,11 @@ clip = core.resize.Bicubic(
 for item in BUBBLES:
     panel = np.load(item["panel"])
     ink = np.load(item["ink"])
-    rgb = panel[..., None] * (0.97 - 0.90 * ink[..., None])
+    if item["style"] == "caption":
+        # SCUMM caption: white ink over a black outline, no panel.
+        rgb = 0.02 + 0.96 * ink[..., None]
+    else:
+        rgb = panel[..., None] * (0.97 - 0.90 * ink[..., None])
     h, w = panel.shape
     color = np.zeros((H, W, 3), np.float32)
     color[item["y"]:item["y"] + h, item["x"]:item["x"] + w] = rgb

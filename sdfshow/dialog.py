@@ -342,6 +342,11 @@ def overlay_plan(show, gen_dir: Path):
     plan = []
     font = float(show.stage_value("font") or 0.042)
     panel = float(show.stage_value("panel") or 1.0)
+    style = (show.stage_value("bubble") or "panel").strip().lower()
+    if style not in ("panel", "caption"):
+        raise SystemExit(
+            f"show.md: stage 'bubble' must be panel or caption (got '{style}')"
+        )
     # A speaker's seat is where their field sits, so the panel is centred over their head
     # and the tail points at them, even with four of them. Falls back to alternating
     # sides for a speaker with no field.
@@ -349,32 +354,39 @@ def overlay_plan(show, gen_dir: Path):
     tracks = _stage_tracks(show)
     for index, line in enumerate(lines):
         cap = max(8, round(height * font))
-        cx = seats.get(line.speaker, -0.35 if index % 2 == 0 else 0.35)
-        zoom, focus_x = _camera(show, tracks, line.lo)
-        head_x = width * 0.5 + (cx - focus_x) * zoom * height
-        # The panel's width depends on the text, not on the tail, so measure once, place
-        # the panel, then rebuild with a tail that points at the head.
-        item = textmask.bubble(
-            line.text,
-            cap,
-            tail_right=True,
-            max_width=width * 0.34,
-            panel_scale=panel,
-        )
-        bw, bh = item.size
-        x = min(max(round(head_x - bw / 2.0), 4), width - bw - 4)
-        tip = (head_x - x) / bw
-        item = textmask.bubble(
-            line.text,
-            cap,
-            tail_right=tip > 0.5,
-            max_width=width * 0.34,
-            panel_scale=panel,
-            tip_frac=tip,
-        )
-        bw, bh = item.size
-        # Seat the bubble above its speaker's head, inside the frame.
-        y = round(height * 0.07)
+        if style == "caption":
+            # SCUMM grammar: one caption, centred at the top, no tail.
+            item = textmask.caption(line.text, cap, width * 0.72)
+            bw, bh = item.size
+            x = max(4, (width - bw) // 2)
+            y = max(4, round(height * 0.055))
+        else:
+            cx = seats.get(line.speaker, -0.35 if index % 2 == 0 else 0.35)
+            zoom, focus_x = _camera(show, tracks, line.lo)
+            head_x = width * 0.5 + (cx - focus_x) * zoom * height
+            # The panel's width depends on the text, not on the tail, so measure once,
+            # place the panel, then rebuild with a tail that points at the head.
+            item = textmask.bubble(
+                line.text,
+                cap,
+                tail_right=True,
+                max_width=width * 0.34,
+                panel_scale=panel,
+            )
+            bw, bh = item.size
+            x = min(max(round(head_x - bw / 2.0), 4), width - bw - 4)
+            tip = (head_x - x) / bw
+            item = textmask.bubble(
+                line.text,
+                cap,
+                tail_right=tip > 0.5,
+                max_width=width * 0.34,
+                panel_scale=panel,
+                tip_frac=tip,
+            )
+            bw, bh = item.size
+            # Seat the bubble above its speaker's head, inside the frame.
+            y = round(height * 0.07)
         np.save(masks / f"{index:02d}_panel.npy", item.panel)
         np.save(masks / f"{index:02d}_ink.npy", item.ink)
         plan.append(
@@ -385,6 +397,7 @@ def overlay_plan(show, gen_dir: Path):
                 "h": bh,
                 "from": line.lo * bar,
                 "to": line.hi * bar,
+                "style": style,
             }
         )
     return plan

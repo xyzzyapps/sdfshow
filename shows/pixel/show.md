@@ -72,6 +72,7 @@ Back to front. Diner furniture first, then house furniture, then the cast, then 
 | rug |
 | lamp |
 | aina_legs |
+| aina_neck |
 | aina_body |
 | aina_hands |
 | aina |
@@ -80,6 +81,7 @@ Back to front. Diner furniture first, then house furniture, then the cast, then 
 | aina_pupil |
 | aina_mouth |
 | boris_legs |
+| boris_neck |
 | boris_body |
 | boris_hands |
 | boris |
@@ -88,6 +90,7 @@ Back to front. Diner furniture first, then house furniture, then the cast, then 
 | boris_pupil |
 | boris_mouth |
 | dora_legs |
+| dora_neck |
 | dora_body |
 | dora_hands |
 | dora |
@@ -96,6 +99,7 @@ Back to front. Diner furniture first, then house furniture, then the cast, then 
 | dora_pupil |
 | dora_mouth |
 | ellis_legs |
+| ellis_neck |
 | ellis_body |
 | ellis_hands |
 | ellis |
@@ -123,6 +127,7 @@ is the darkest red on the face, because it is the shape that moves.
 | rug | 0.70\|0.42\|0.32 | none | 1.0 |
 | lamp | 0.98\|0.86\|0.44 | none | 1.0 |
 | aina_legs | 0.22\|0.24\|0.30 | none | 1.0 |
+| aina_neck | 0.98\|0.96\|0.93 | none | 1.0 |
 | aina_body | 0.24\|0.42\|0.62 | none | 1.0 |
 | aina_hands | 0.98\|0.96\|0.93 | none | 1.0 |
 | aina | 0.98\|0.96\|0.93 | none | 1.0 |
@@ -131,7 +136,8 @@ is the darkest red on the face, because it is the shape that moves.
 | aina_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | aina_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
 | boris_legs | 0.26\|0.22\|0.22 | none | 1.0 |
-| boris_body | 0.62\|0.24\|0.22 | none | 1.0 |
+| boris_neck | 0.98\|0.96\|0.93 | none | 1.0 |
+| boris_body | 0.44\|0.28\|0.54 | none | 1.0 |
 | boris_hands | 0.98\|0.96\|0.93 | none | 1.0 |
 | boris | 0.98\|0.96\|0.93 | none | 1.0 |
 | boris_hair | 0.88\|0.74\|0.32 | none | 1.0 |
@@ -139,6 +145,7 @@ is the darkest red on the face, because it is the shape that moves.
 | boris_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | boris_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
 | dora_legs | 0.24\|0.22\|0.30 | none | 1.0 |
+| dora_neck | 0.98\|0.96\|0.93 | none | 1.0 |
 | dora_body | 0.74\|0.62\|0.26 | none | 1.0 |
 | dora_hands | 0.98\|0.96\|0.93 | none | 1.0 |
 | dora | 0.98\|0.96\|0.93 | none | 1.0 |
@@ -147,6 +154,7 @@ is the darkest red on the face, because it is the shape that moves.
 | dora_pupil | 0.10\|0.08\|0.09 | none | 1.0 |
 | dora_mouth | 0.36\|0.12\|0.14 | none | 1.0 |
 | ellis_legs | 0.22\|0.24\|0.26 | none | 1.0 |
+| ellis_neck | 0.98\|0.96\|0.93 | none | 1.0 |
 | ellis_body | 0.30\|0.48\|0.32 | none | 1.0 |
 | ellis_hands | 0.98\|0.96\|0.93 | none | 1.0 |
 | ellis | 0.98\|0.96\|0.93 | none | 1.0 |
@@ -160,12 +168,12 @@ is the darkest red on the face, because it is the shape that moves.
 The cut is at bar 8: the diner set goes away, the living room arrives, and the cast
 changes with it.
 
-| bars | sky | floor_diner | booth | table | cup | wall_house | floor_house | sofa | rug | lamp | aina_legs | aina_body | aina_hands | aina | aina_hair | aina_eye | aina_pupil | aina_mouth | boris_legs | boris_body | boris_hands | boris | boris_hair | boris_eye | boris_pupil | boris_mouth | dora_legs | dora_body | dora_hands | dora | dora_hair | dora_eye | dora_pupil | dora_mouth | ellis_legs | ellis_body | ellis_hands | ellis | ellis_hair | ellis_eye | ellis_pupil | ellis_mouth |
-|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
-| 0-4 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x |
-| 4-8 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x |
-| 8-14 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x |
-| 14-20 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u |
+| bars | sky | floor_diner | booth | table | cup | wall_house | floor_house | sofa | rug | lamp | aina_legs | aina_neck | aina_body | aina_hands | aina | aina_hair | aina_eye | aina_pupil | aina_mouth | boris_legs | boris_neck | boris_body | boris_hands | boris | boris_hair | boris_eye | boris_pupil | boris_mouth | dora_legs | dora_neck | dora_body | dora_hands | dora | dora_hair | dora_eye | dora_pupil | dora_mouth | ellis_legs | ellis_neck | ellis_body | ellis_hands | ellis | ellis_hair | ellis_eye | ellis_pupil | ellis_mouth |
+|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| 0-4 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x | x |
+| 4-8 | u | u | u | u | u | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x |
+| 8-14 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | x | x | x | x | x | x | x | x | x |
+| 14-20 | x | x | x | x | x | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u | u |
 
 ## Dialogue
 
@@ -174,7 +182,7 @@ Dora is `slt*0.92`: the same speaker, pitched down with rubberband, and not Aina
 
 | speaker | bars | text | voice |
 |---------|------|------|-------|
-| AINA | 1-2 | We have been sitting here for an hour. | slt |
+| AINA | 1-2 | Why are we standing? | slt |
 | BORIS | 2-3 | The sign says wait to be seated. | rms |
 | DORA | 5-6 | I have been standing since Tuesday. | slt*0.92 |
 | BORIS | 6-7 | It is Thursday. | rms |

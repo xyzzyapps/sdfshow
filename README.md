@@ -361,7 +361,8 @@ The shipped 2D templates:
 | `ellipse2d.glsl` | ellipse (`rx`, `ry`) |
 | `box2d.glsl` | rounded box (`hx`, `hy`, `round`) |
 | `capsule2d.glsl` | capsule |
-| `head2d.glsl` | one big oval skull, no neck (`wide`) |
+| `head2d.glsl` | one big oval skull (`wide`) |
+| `neck2d.glsl` | a short neck, drawn behind the shirt (`shoulders`) |
 | `body2d.glsl` | the shirt: one rounded block (`shoulders`) |
 | `arms2d.glsl` | two arms with round hands, mirrored (`shoulders`) |
 | `legs2d.glsl` | two trouser legs, mirrored |
@@ -390,8 +391,8 @@ The shipped 2D templates:
 Three consequences worth knowing before writing a 2D show:
 
 - **A layer is one flat fill.** A figure cannot be one shape with painted features, so
-  it is nine rows - trousers, shirt, arms and hands, head, hair, white sclera, pupils,
-  mouth - each with its own colour. The whole cast shares one paper-white skin; shirts,
+  it is ten rows - trousers, neck, shirt, arms and hands, head, hair, white sclera,
+  pupils, mouth - each with its own colour. The whole cast shares one paper-white skin; shirts,
   hair and trousers carry the difference. Furniture splits the same way (a window is a
   pane plus a frame).
 - **Cells are visibility, not operators.** `x` means the layer is absent; `u` and `u<k>`
@@ -526,7 +527,7 @@ tolerance of 0.01. Exit code 0 means the generated shader matches the mathematic
 | the whole frame is black with `crt` | `curvature` is pushing the corners off-screen; lower it |
 | a kaleido fold hides the scene | the fold repeats the field, so raise `distance` or move `target` |
 | a 2D layer is missing | its `Sections` cell is `x`; a 2D layer is drawn only when its row is active |
-| a 2D character's face floats | trousers, shirt, arms, head, hair, sclera, pupils and mouth are separate rows; check their `cx`/`cy` agree |
+| a 2D character's face floats | trousers, neck, shirt, arms, head, hair, sclera, pupils and mouth are separate rows; check their `cx`/`cy` agree |
 | the 2D picture has no shading | by design: a layer is one flat fill, and `outline` draws the rim |
 | text is clipped at the top of the bubble | the mask's baseline and canvas must derive from the same numbers; see `SPEC.md` §10.3 |
 | letters are too big but the bubble is right | lower `font` only; `panel` is the padding, independent of type size |

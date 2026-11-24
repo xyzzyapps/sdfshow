@@ -156,6 +156,47 @@ def _rounded_box(h: int, w: int, radius: float, cx: float, cy: float) -> np.ndar
     return outside + inside - radius
 
 
+def _dilate(mask: np.ndarray, radius: int) -> np.ndarray:
+    """Grow a coverage mask by *radius* pixels, one 8-neighbour pass at a time."""
+    out = mask
+    for _ in range(radius):
+        padded = np.pad(out, 1)
+        out = np.maximum.reduce(
+            [
+                padded[1:-1, 1:-1],
+                padded[:-2, 1:-1],
+                padded[2:, 1:-1],
+                padded[1:-1, :-2],
+                padded[1:-1, 2:],
+                padded[:-2, :-2],
+                padded[:-2, 2:],
+                padded[2:, :-2],
+                padded[2:, 2:],
+            ]
+        )
+    return out
+
+
+def caption(
+    text: str,
+    cap: float,
+    max_width: float,
+    max_lines: int = 2,
+    outline: int = 2,
+) -> Bubble:
+    """SCUMM-style caption: white type with a dark outline, no panel.
+
+    The two masks are the ink and a dilation of it. The renderer draws the ink white and
+    everything inside the dilation black, so the alpha is the outline and the letters sit
+    on a dark rim that reads over a busy night scene.
+    """
+    lines, cap = fit(text, cap, max_width, max_lines)
+    ink = text_mask(lines, cap)
+    ring = _dilate(ink, outline)
+    pad = outline + 1
+    return Bubble(np.pad(ring, pad), np.pad(ink, pad), tuple(lines))
+
+
 def bubble(
     text: str,
     cap: float,

@@ -71,8 +71,11 @@ Open work only. Design reasoning lives in `SPEC.md`.
       the male `awb`; the voice cell accepts `<voice>*<pitch>` and is tested
 - [x] cast restyle: one paper-white skin, shirts, arms with hands, two legs; the head
       layer is the skull only (a neck painted over the shirt read as a beard)
-- [x] figure templates `body2d`, `arms2d`, `legs2d`; mirroring needs `abs` on the local
-      point, or the pair merges into one column
+- [x] figure templates `neck2d`, `body2d`, `arms2d`, `legs2d`; mirroring needs `abs`
+      on the local point, or the pair merges into one column
+- [x] opening line follows the staging: the cast stands, so Aina asks why
+- [x] Boris's shirt moved from brick (the booth colour) to violet, so he reads against
+      the diner
 - [x] `bars: auto`: the clock measures the last `## Dialogue` bar, so the show stops
       with the dialogue; numeric `bars` still works, and a line past the end fails by name
 - [x] mouth tracks corrected to each speaker's own bar windows (they were one line out)

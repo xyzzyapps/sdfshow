@@ -844,9 +844,9 @@ Manual / visual:
   perspective would need per-layer depths.
 - **2D mode has no operators.** `u<k>`, `s<k>` and `i<k>` lose their meaning: a layer
   paints or it does not. Cross-fades (`m`) degrade to a visibility test at `w > 0.5`.
-- **A 2D figure is many layers.** Nine rows per character - trousers, shirt, arms and
-  hands, head, hair, sclera, pupils, mouth - and each row needs a colour and a cell in
-  every section. That is the cost of one fill per layer, and why the Sections table is
+- **A 2D figure is many layers.** Ten rows per character - trousers, neck, shirt, arms
+  and hands, head, hair, sclera, pupils, mouth - and each row needs a colour and a cell
+  in every section. That is the cost of one fill per layer, and why the Sections table is
   wide.
 - **Bubble text is capped at 48 characters.** Longer lines fail at parse time; there
   is no automatic reflow across two bubbles.
@@ -971,7 +971,7 @@ between layers - would need a depth per layer, a second value out of every templ
 and a sort; it buys nothing a table order cannot express.
 
 **One fill per layer, therefore many layers per figure.** A cutout figure is
-`legs + body + arms + head + hair + sclera + pupils + mouth`, nine rows. That looks
+`legs + neck + body + arms + head + hair + sclera + pupils + mouth`, ten rows. That looks
 verbose next to a 3D figure, which is one field with shading, but it is the same trade
 the format makes everywhere: the picture is a table, and every entry is inspectable. The
 alternative - a template that returns a colour per pixel - would turn templates into

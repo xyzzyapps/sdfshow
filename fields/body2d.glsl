@@ -6,7 +6,7 @@
 vec2 q = (p.xy - vec2({{cx}}, {{cy}})) / {{s}};
 float shoulders = {{shoulders}};
 
-vec2 bq = abs(q - vec2(0.0, -0.76)) - vec2(0.34 * shoulders - 0.10, 0.20 - 0.10);
+vec2 bq = abs(q - vec2(0.0, -0.80)) - vec2(0.34 * shoulders - 0.10, 0.20 - 0.10);
 float body = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 0.10;
 
 return body * {{s}};
